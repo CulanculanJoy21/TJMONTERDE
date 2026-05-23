@@ -67,6 +67,7 @@ const STATUS_STYLES = {
   rejected:   { bg: "#FEE2E2", color: "#991B1B", label: "Rejected" },
   in_transit: { bg: "#DBEAFE", color: "#1E40AF", label: "In Transit" },
   out_for_delivery: { bg: "#D1FAE5", color: "#065F46", label: "Out for Delivery" },
+  cancelled: { bg: "#FEE2E2", color: "#991B1B", label: "Cancelled" },
   // Role badges for User Management
   admin:      { bg: "#EEF2FF", color: "#4338CA", label: "Admin" },
   manager:    { bg: "#FDF2F7", color: "#9D174D", label: "Manager" },

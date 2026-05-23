@@ -73,11 +73,7 @@ class DeliveryController extends Controller
 
     public function destroy(Delivery $delivery)
     {
-        if ($delivery->status === 'delivered') {
-            return response()->json([
-                'message' => 'Cannot delete a tracking record for a completed delivery.'
-            ], 422);
-        }
+        // 🔥 REMOVED THE GUARD BLOCK THAT RESTRICTED DELETING DELIVERED SHIPMENTS
 
         ActivityLog::create([
             'user_id' => auth()->id(),
@@ -93,8 +89,9 @@ class DeliveryController extends Controller
 
     public function updateStatus(Request $request, Delivery $delivery)
     {
+        // 🛠️ FIXED: Consolidated status declarations to include 'cancelled' cleanly
         $data = $request->validate([
-            'status'    => 'required|in:pending,in_transit,out_for_delivery,delivered',
+            'status'    => 'required|in:pending,in_transit,out_for_delivery,delivered,cancelled',
             'location'  => 'nullable|string|max:255',
             'note'      => 'nullable|string|max:500',
             'driver_id' => 'nullable|exists:users,id',
@@ -122,10 +119,15 @@ class DeliveryController extends Controller
                     'data'    => json_encode(['delivery_id' => $delivery->id, 'order_id' => $order->id]),
                 ]);
                 
-                // 🔥 SWITCH TAGS TO CAPTURE PHYSICAL DOCK ARRIVAL EVENT
                 $actionTag = 'ARRIVAL';
                 $logDetails = "Delivery TRK-{$delivery->id} has arrived. {$order->qty} units of '{$product->name}' successfully verified and checked into warehouse inventory";
             }
+        }
+
+        // 🔥 ADDED LOGIC FOR ACTION BADGE RECORD IF MANUALLY CANCELLED
+        if ($data['status'] === 'cancelled' && $delivery->status !== 'cancelled') {
+            $actionTag = 'DELETE';
+            $logDetails = "Cancelled active progress trail for tracking record TRK-{$delivery->id}";
         }
 
         $delivery->update([
