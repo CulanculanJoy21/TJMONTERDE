@@ -565,7 +565,7 @@ function InventoryPage({ user, toast }) {
                         <button onClick={() => openEdit(p)} style={{ background: "#EFF6FF", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#1D4ED8", fontSize: 13 }}><i className="ti ti-edit" /></button>
                         
                         {/* 🔥 ADMIN-ONLY PROTECTION FOR PRODUCT DELETION */}
-                        {user?.role === "admin" && (
+                        {user?.role?.toLowerCase() === "admin" && (
                           <button onClick={() => handleDelete(p.id)} style={{ background: "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#DC2626", fontSize: 13 }}><i className="ti ti-trash" /></button>
                         )}
                       </div>
@@ -838,7 +838,7 @@ function OrdersPage({ user, toast }) {
                     )}
                     
                     {/* 🔥 ADMIN-ONLY PROTECTION FOR ORDER RECORD DELETION */}
-                    {(o.status === "delivered" || o.status === "rejected") && user?.role === "admin" && (
+                    {(o.status === "delivered" || o.status === "rejected") && user?.role?.toLowerCase() === "admin" && (
                       <button onClick={() => handleDelete(o.id, o.status)} style={{ padding: "5px 12px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 7, color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer" }} title="Delete Record"><i className="ti ti-trash" style={{ marginRight: 4 }} /> Delete</button>
                     )}
                   </td>
@@ -1061,8 +1061,8 @@ function DeliveriesPage({ user, toast }) {
                 </span>
                 
                 <div style={{ display: "flex", gap: 6 }}>
-                  {/* 🔥 CONDITION A: Show Delete button option ONLY if Delivered/Cancelled AND user role is strict admin */}
-                  {(d.status === "delivered" || d.status === "cancelled") && user?.role === "admin" && (
+                  {/* 🛠️ FIXED: Permissive role case matching */}
+                  {(d.status === "delivered" || d.status === "cancelled") && user?.role?.toLowerCase() === "admin" && (
                     <button 
                       onClick={() => handleDelete(d.id)} 
                       title="Delete Delivery Record"
@@ -1140,7 +1140,7 @@ function DeliveriesPage({ user, toast }) {
 }
 
 // ─── SUPPLIERS PAGE ───────────────────────────────────────────────────────────
-function SuppliersPage({ toast }) {
+function SuppliersPage({ user, toast }) {
   const [suppliers, setSuppliers] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -1185,8 +1185,16 @@ function SuppliersPage({ toast }) {
   };
 
   const handleSave = async () => {
-    if (!form.name) {
-      toast("Company Name is required", "error");
+    // 🛠️ FRONTEND VALIDATION A: Ensure all fields are populated
+    if (!form.name || !form.contact || !form.phone || !form.country) {
+      toast("Please fill up all of the fields completely", "error");
+      return;
+    }
+
+    // 🛠️ FRONTEND VALIDATION B: Enforce explicit email address structure
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailPattern.test(form.contact)) {
+      toast("Invalid format! Email must look like example@gmail.com", "error");
       return;
     }
 
@@ -1201,17 +1209,42 @@ function SuppliersPage({ toast }) {
     try {
       if (editing) {
         const updated = await api.put(`/suppliers/${editing.id}`, payload);
-        // Merge with existing state to keep orders_count
         setSuppliers((prev) => prev.map((s) => (s.id === editing.id ? { ...s, ...updated } : s)));
-        toast("Supplier updated", "success");
+        toast("Supplier updated successfully", "success");
+        setShowModal(false);
       } else {
-        const newSup = await api.post("/suppliers", payload);
-        setSuppliers((prev) => [...prev, { ...newSup, orders_count: 0 }]);
-        toast("Supplier added", "success");
+        const res = await api.post("/suppliers", payload);
+        
+        // 🛠️ INTERCEPT LOGIC: Handle the 202 Staged Approval request from a Manager
+        if (res.message && res.message.includes("submitted for Admin review")) {
+          toast(res.message, "info");
+        } else {
+          // Fallback direct execution for Admins with custom key-binding to clear console warnings
+          setSuppliers((prev) => [
+            ...prev, 
+            { 
+              ...res, 
+              id: res.id || Date.now(), 
+              orders_count: 0 
+            }
+          ]);
+          toast("Supplier added successfully", "success");
+        }
+        setShowModal(false);
       }
-      setShowModal(false);
     } catch (err) {
-      toast("Error: Check unique email/name", "error");
+      console.error("Supplier validation error response:", err);
+      
+      // 🛠️ ERROR HANDLING: Dynamic parsing for standard Laravel 422 validations
+      const backendMessage = err.message || "Execution error code 422: Submission failed";
+      
+      if (backendMessage.toLowerCase().includes("email")) {
+        toast("Database Error: This email address is already registered!", "error");
+      } else if (backendMessage.toLowerCase().includes("name")) {
+        toast("Database Error: This Company Name is already taken!", "error");
+      } else {
+        toast(backendMessage, "error");
+      }
     }
   };
 
@@ -1257,8 +1290,15 @@ function SuppliersPage({ toast }) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => openEdit(s)} style={editBtnStyle}><i className="ti ti-edit" /></button>
-                <button onClick={() => handleDelete(s.id)} style={deleteBtnStyle}><i className="ti ti-trash" /></button>
+                {/* Admin-only Revision Pencil */}
+                {user?.role?.toLowerCase() === "admin" && (
+                  <button onClick={() => openEdit(s)} style={editBtnStyle}><i className="ti ti-edit" /></button>
+                )}
+                
+                {/* Admin-only Destruction Trash Can */}
+                {user?.role?.toLowerCase() === "admin" && (
+                  <button onClick={() => handleDelete(s.id)} style={deleteBtnStyle}><i className="ti ti-trash" /></button>
+                )}
               </div>
             </div>
             
@@ -1290,7 +1330,7 @@ function SuppliersPage({ toast }) {
             <input value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} style={inputStyle} />
           </Field>
           <Field label="Contact Email">
-            <input type="email" value={form.contact} onChange={(e) => setForm({...form, contact: e.target.value})} style={inputStyle} />
+            <input type="email" value={form.contact} onChange={(e) => setForm({...form, contact: e.target.value})} style={inputStyle} placeholder="example@gmail.com" />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Phone"><input value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})} style={inputStyle} /></Field>
@@ -1744,6 +1784,200 @@ function ActivityLogsPage({ toast }) {
     </div>
   );
 }
+function ApprovalsDashboard({ toast }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [processingId, setProcessingId] = useState(null);
+  const [reviewNotes, setReviewNotes] = useState({});
+
+  const fetchApprovals = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 🛠️ FIXED: Swapped out native fetch for your system's global api layer
+      const res = await api.get('/approvals');
+      const data = res.data || res || [];
+      setRequests(data);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError(err.response?.data?.message || 'Failed to retrieve pending approvals staging index');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApprovals();
+  }, []);
+
+  const handleReview = async (id, status) => {
+    setProcessingId(id);
+    try {
+      await api.patch(`/approvals/${id}/review`, {
+        status,
+        review_note: reviewNotes[id] || ''
+      });
+      toast(`Action marked as ${status} successfully`, "success");
+      setRequests(prev => prev.filter(req => req.id !== id));
+    } catch (err) {
+      console.error("Review error:", err);
+      toast(err.response?.data?.message || 'Failed to submit decision matrix update', "error");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleNoteChange = (id, val) => {
+    setReviewNotes(prev => ({ ...prev, [id]: val }));
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px", color: "#6B7280" }}>
+        {/* 🛠️ FIXED: Swapped out Lucide RefreshCw */}
+        <i className="ti ti-refresh animate-spin text-indigo-600" style={{ fontSize: 32, marginBottom: 12, color: "#1D4ED8" }} />
+        <p style={{ fontSize: 14, fontWeight: 500 }}>Loading administrative validation queue...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: "16px", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 12, color: "#991B1B", display: "flex", gap: 12, alignItems: "flex-start" }}>
+        {/* 🛠️ FIXED: Swapped out Lucide AlertCircle */}
+        <i className="ti ti-alert-circle" style={{ fontSize: 20, color: "#DC2626", marginTop: 2 }} />
+        <div>
+          <h4 style={{ margin: 0, fontWeight: 600 }}>Security Clearance Error</h4>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#B91C1C" }}>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* HEADER SECTION */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #E5E7EB", paddingBottom: 16 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#111827" }}>Manager Approvals Staging Queue</h2>
+          <p style={{ margin: "4px 0 0", color: "#6B7280", fontSize: 14 }}>Review, authorize, or decline pending operational changes initiated by Facility Managers.</p>
+        </div>
+        <button 
+          onClick={fetchApprovals}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 10, fontSize: 13, fontWeight: 500, color: "#374151", cursor: "pointer" }}
+        >
+          {/* 🛠️ FIXED: Swapped out Lucide RefreshCw */}
+          <i className="ti ti-refresh" /> Refresh Queue
+        </button>
+      </div>
+
+      {requests.length === 0 ? (
+        <div style={{ flexDirection: "column", display: "flex", alignItems: "center", justifyContent: "center", border: "2px dashed #E5E7EB", borderRadius: 14, padding: "60px", textAlign: "center" }}>
+          <div style={{ w: 48, h: 48, background: "#D1FAE5", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", padding: "12px", color: "#065F46", marginBottom: 16 }}>
+            {/* 🛠️ FIXED: Swapped out Lucide Layers */}
+            <i className="ti ti-layers" style={{ fontSize: 24 }} />
+          </div>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#111827" }}>Clear Audit Horizon</h3>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6B7280", maxWidth: 360 }}>There are no pending actions awaiting review. All operational parameters match authorized runtime states perfectly.</p>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {requests.map((req) => (
+            <div key={req.id} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, display: "flex", flexDirection: "row", overflow: "hidden", boxShadow: "0 1px 2px 0 rgba(0,0,0,0.05)" }}>
+              {/* Left Column */}
+              <div style={{ padding: 20, background: "#F9FAFB", borderRight: "1px solid #E5E7EB", minWidth: 240, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  
+                  {/* Cleaned-up Badge Group Stack */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {/* Action Type Row */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" }}>Action:</span>
+                      <span style={{ 
+                        padding: "2px 8px", fontSize: 11, fontWeight: 700, borderRadius: 6, border: "1px solid",
+                        background: req.action_type === 'CREATE' ? '#EEF2FF' : (req.action_type === 'UPDATE' ? '#FFFBEB' : '#FEF2F2'),
+                        color: req.action_type === 'CREATE' ? '#4F46E5' : (req.action_type === 'UPDATE' ? '#D97706' : '#DC2626'),
+                        borderColor: req.action_type === 'CREATE' ? '#C7D2FE' : (req.action_type === 'UPDATE' ? '#FDE68A' : '#FCA5A5')
+                      }}>
+                        {req.action_type}
+                      </span>
+                    </div>
+
+                    {/* Target Model/Module Row */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9CA3AF", textTransform: "uppercase" }}>Module:</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#374151", background: "#fff", padding: "2px 6px", border: "1px solid #E5E7EB", borderRadius: 4 }}>
+                        {req.model_type}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, marginTop: 4 }}>
+                    <div style={{ color: "#9CA3AF" }}>Submitted By:</div>
+                    <div style={{ fontWeight: 600, color: "#111827", marginTop: 2 }}>{req.user?.name || "Unknown Manager"}</div>
+                  </div>
+                  
+                  <div style={{ fontSize: 12 }}>
+                    <div style={{ color: "#9CA3AF" }}>Timestamp:</div>
+                    <div style={{ fontWeight: 500, color: "#4B5563", marginTop: 2 }}>{new Date(req.created_at).toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {req.model_id && (
+                  <div style={{ fontSize: 11, color: "#9CA3AF", borderTop: "1px solid #E5E7EB", paddingTop: 12, marginTop: 12 }}>
+                    Target Record ID: <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#374151" }}>#{req.model_id}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Center Column */}
+              <div style={{ padding: 20, flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+                <div>
+                  <h4 style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", tracking: "wider" }}>Staging Parameters</h4>
+                  <div style={{ background: "#111827", borderRadius: 10, padding: 16, fontFamily: "monospace", fontSize: 12, color: "#34D399", overflowX: "auto", maxHeight: 180 }}>
+                    <pre style={{ margin: 0 }}>{JSON.stringify(req.payload, null, 2)}</pre>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ block: "block", fontSize: 11, fontWeight: 700, color: "#4B5563", textTransform: "uppercase", marginBottom: 6 }}>Review Note (Optional)</label>
+                  <input
+                    type="text"
+                    value={reviewNotes[req.id] || ''}
+                    onChange={(e) => handleNoteChange(req.id, e.target.value)}
+                    placeholder="Provide diagnostic validation details explaining approval context..."
+                    style={{ width: "100%", padding: "8px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13 }}
+                    disabled={processingId === req.id}
+                  />
+                </div>
+              </div>
+
+              {/* Right Action Column */}
+              <div style={{ padding: 20, borderLeft: "1px solid #E5E7EB", display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, minWidth: 150 }}>
+                <button
+                  onClick={() => handleReview(req.id, 'approved')}
+                  disabled={processingId !== null}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 16px", background: "#059669", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: processingId !== null ? 0.5 : 1 }}
+                >
+                  {/* 🛠️ FIXED: Swapped out Lucide Check */}
+                  <i className="ti ti-check" /> Approve
+                </button>
+                <button
+                  onClick={() => handleReview(req.id, 'rejected')}
+                  disabled={processingId !== null}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px 16px", background: "#fff", border: "1px solid #FCA5A5", color: "#DC2626", borderWith: 1, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: processingId !== null ? 0.5 : 1 }}
+                >
+                  {/* 🛠️ FIXED: Swapped out Lucide X */}
+                  <i className="ti ti-x" /> Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -1837,7 +2071,8 @@ export default function App() {
     deliveries: DeliveriesPage, 
     suppliers: SuppliersPage, 
     reports: ReportsPage,
-    logs: user?.role === "admin" ? ActivityLogsPage : DashboardPage
+    logs: user?.role === "admin" ? ActivityLogsPage : DashboardPage,
+    approvals: user?.role === "admin" ? ApprovalsDashboard : DashboardPage
   };
 
   const PageComponent = pages[page] || DashboardPage;
@@ -1903,6 +2138,19 @@ export default function App() {
             >
               <i className="ti ti-clipboard-list" style={{ fontSize: 18 }} />
               {sidebarOpen && <span style={{ fontSize: 13, fontWeight: 500 }}>Activity Logs</span>}
+            </button>
+          )}
+          {user?.role === "admin" && (
+            <button 
+              onClick={() => setPage("approvals")}
+              style={{ 
+                width: "100%", display: "flex", alignItems: "center", gap: 10, padding: sidebarOpen ? "10px 12px" : "10px", 
+                borderRadius: 9, border: "none", cursor: "pointer", marginBottom: 2,
+                background: page === "approvals" ? "#1D4ED8" : "transparent", color: page === "approvals" ? "#fff" : "#9CA3AF"
+              }}
+            >
+              <i className="ti ti-shield-check" style={{ fontSize: 18 }} />
+              {sidebarOpen && <span style={{ fontSize: 13, fontWeight: 500 }}>Pending Approvals</span>}
             </button>
           )}
         </nav>
@@ -1987,7 +2235,8 @@ export default function App() {
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: 28 }}>
-          <PageComponent toast={toast} searchTerm={searchTerm} onNavigate={setPage} />
+          {/* 🛠️ FIXED: Passing the authenticated user object straight down into your page components */}
+          <PageComponent user={user} toast={toast} searchTerm={searchTerm} onNavigate={setPage} />
         </div>
       </div>
 
