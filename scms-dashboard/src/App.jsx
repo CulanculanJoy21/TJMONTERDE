@@ -977,7 +977,25 @@ function DeliveriesPage({ toast }) {
     }
   };
 
-  // NEW HANDLER: Submits structural DELETE request directly to Laravel
+  // NEW HANDLER: Fast cancellation update from card footer
+  const handleCancelInline = async (id) => {
+    if (!window.confirm(`Are you sure you want to cancel delivery TRK-${id}?`)) return;
+
+    try {
+      const res = await api.patch(`/deliveries/${id}/status`, { status: "cancelled" });
+      const updated = res.data || res;
+
+      setDeliveries((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...updated } : d))
+      );
+      toast(`Delivery TRK-${id} has been cancelled`, "info");
+    } catch (err) {
+      console.error("Cancellation error:", err);
+      toast("Failed to process cancellation.", "error");
+    }
+  };
+
+  // Submits structural DELETE request directly to Laravel
   const handleDelete = async (id) => {
     if (!window.confirm(`Are you sure you want to permanently delete tracking record TRK-${id}?`)) return;
 
@@ -989,7 +1007,7 @@ function DeliveriesPage({ toast }) {
       setDeliveries(prev => prev.filter(d => d.id !== id));
     } catch (err) {
       console.error("Delete error:", err);
-      toast(err.response?.data?.message || "Failed to remove delivery record.", "error");
+      toast("Failed to remove delivery record.", "error");
     }
   };
 
@@ -1052,15 +1070,25 @@ function DeliveriesPage({ toast }) {
                 </span>
                 
                 <div style={{ display: "flex", gap: 6 }}>
-                  {/* Safely blocks delete option if the status has completed processing */}
-                  {d.status !== "delivered" && (
+                  {/* CONDITION A: If Delivered or Cancelled, reveal the Delete button option */}
+                  {(d.status === "delivered" || d.status === "cancelled") && (
+                    <button 
+                      onClick={() => handleDelete(d.id)} 
+                      title="Delete Delivery Record"
+                      style={{ padding: "6px 10px", background: "#FEF2F2", border: "none", borderRadius: 7, color: "#DC2626", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                    >
+                      Delete
+                    </button>
+                  )}
+
+                  {/* CONDITION B: If active, reveal Cancel and Update Tracking controls */}
+                  {d.status !== "delivered" && d.status !== "cancelled" && (
                     <>
                       <button 
-                        onClick={() => handleDelete(d.id)} 
-                        title="Delete Delivery Record"
-                        style={{ padding: "6px 10px", background: "#FEF2F2", border: "none", borderRadius: 7, color: "#DC2626", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center" }}
+                        onClick={() => handleCancelInline(d.id)} 
+                        style={{ padding: "6px 10px", background: "#FFF1F2", border: "none", borderRadius: 7, color: "#E11D48", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
                       >
-                        Delete
+                        Cancel Delivery
                       </button>
                       <button 
                         onClick={() => openUpdate(d)} 
