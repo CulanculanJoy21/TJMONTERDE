@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\StockHistory;
 use App\Models\Notification;
+use App\Models\ActivityLog;
 
 class ProductController extends Controller
 {
@@ -50,6 +51,14 @@ class ProductController extends Controller
 
         $product = Product::create($data);
 
+        // LOG PRODUCT CREATION TO AUDIT TRAIL
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'CREATE',
+            'description' => "Added new product '{$product->name}' (SKU: {$product->sku}) with initial stock of {$product->stock_qty} units",
+            'ip_address' => $request->ip()
+        ]);
+
         StockHistory::create([
             'product_id' => $product->id,
             'user_id'    => $request->user()->id,
@@ -83,19 +92,32 @@ class ProductController extends Controller
 
         $product->update($data);
 
+        // LOG PRODUCT COMPONENT EDITS TO AUDIT TRAIL
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'UPDATE',
+            'description' => "Updated product details for '{$product->name}' (SKU: {$product->sku})",
+            'ip_address' => $request->ip()
+        ]);
+
         return response()->json($product->load('supplier:id,name'));
     }
 
     public function destroy(Product $product)
     {
+        // LOG PRODUCT DELETION TO AUDIT TRAIL BEFORE WIPING REFS
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE',
+            'description' => "Removed product '{$product->name}' (SKU: {$product->sku}) from system inventory records",
+            'ip_address' => request()->ip()
+        ]);
+
         $product->delete();
 
-        return response()->json(['message' => 'Product deleted.']);
+        return response()->json(['message' => 'Product deleted successfully.']);
     }
 
-    /**
-     * Manual stock adjustment (add / remove units).
-     */
     public function adjustStock(Request $request, Product $product)
     {
         $data = $request->validate([
@@ -113,6 +135,15 @@ class ProductController extends Controller
 
         $product->update(['stock_qty' => $newStock]);
 
+        // LOG INDIVIDUAL STOCK ADJUSTMENT TYPE CHROMATICALLY
+        $actionWord = $data['type'] === 'add' ? 'RESTOCK' : 'DEDUCT';
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => $actionWord,
+            'description' => "Manually adjusted stock for '{$product->name}': " . ($data['type'] === 'add' ? "added" : "removed") . " {$data['qty']} units. (New Facility Stock: {$newStock})",
+            'ip_address' => $request->ip()
+        ]);
+
         StockHistory::create([
             'product_id' => $product->id,
             'user_id'    => $request->user()->id,
@@ -122,7 +153,6 @@ class ProductController extends Controller
             'note'       => $data['note'] ?? null,
         ]);
 
-        // Trigger low-stock notification
         if ($newStock <= $product->reorder_point) {
             Notification::create([
                 'type'    => 'low_stock',
@@ -138,9 +168,6 @@ class ProductController extends Controller
         ]);
     }
 
-    /**
-     * Stock movement history for a product.
-     */
     public function stockHistory(Product $product)
     {
         $history = $product->stockHistories()

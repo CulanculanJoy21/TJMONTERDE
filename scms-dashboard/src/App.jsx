@@ -1641,6 +1641,89 @@ function UserManagementPage({ toast }) {
     </div>
   );
 }
+// ─── ACTIVITY LOGS PAGE ──────────────────────────────────────────────────────
+function ActivityLogsPage({ toast }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchLogs = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get("/activity-logs");
+      const logItems = res.data?.data || res.data || [];
+      setLogs(logItems);
+    } catch (err) {
+      console.error("Failed to load audit logs:", err);
+      toast("Could not access security logs", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchLogs(); }, []);
+
+  const getActionColor = (action) => {
+    switch (action) {
+      case "CREATE": 
+      case "ORDER":   return { bg: "#E0F2FE", text: "#0369A1" }; // Light Blue
+      case "UPDATE":  return { bg: "#FEF3C7", text: "#B45309" }; // Amber
+      case "APPROVE": 
+      case "ARRIVAL":  return { bg: "#D1FAE5", text: "#065F46" }; // Emerald Green
+      case "DELETE": 
+      case "REJECT":   return { bg: "#FEE2E2", text: "#B91C1C" }; // Red
+      default:        return { bg: "#F3F4F6", text: "#374151" }; // Gray
+    }
+  };
+
+  if (loading) return <div style={{ padding: 20, color: "#6B7280" }}>Loading system trail matrices...</div>;
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#111827" }}>System Activity Logs</h2>
+          <p style={{ margin: "4px 0 0", color: "#6B7280", fontSize: 14 }}>Real-time immutable operation audit trail</p>
+        </div>
+        <button onClick={fetchLogs} style={{ padding: "8px 16px", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Refresh Trails</button>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB" }}>
+              <th style={{ padding: "12px 16px", color: "#4B5563", fontWeight: 600 }}>Timestamp</th>
+              <th style={{ padding: "12px 16px", color: "#4B5563", fontWeight: 600 }}>User / Operator</th>
+              <th style={{ padding: "12px 16px", color: "#4B5563", fontWeight: 600 }}>Action</th>
+              <th style={{ padding: "12px 16px", color: "#4B5563", fontWeight: 600 }}>Description</th>
+              <th style={{ padding: "12px 16px", color: "#4B5563", fontWeight: 600 }}>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.length > 0 ? logs.map((log) => {
+              const colors = getActionColor(log.action);
+              return (
+                <tr key={log.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                  <td style={{ padding: "14px 16px", color: "#6B7280" }}>{new Date(log.created_at).toLocaleString()}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    <div style={{ fontWeight: 500, color: "#111827" }}>{log.user?.name || "Unknown Operator"}</div>
+                    <div style={{ fontSize: 11, color: "#9CA3AF", textTransform: "capitalize" }}>{log.user?.role?.replace('_', ' ')}</div>
+                  </td>
+                  <td style={{ padding: "14px 16px" }}>
+                    <span style={{ padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: colors.bg, color: colors.text }}>{log.action}</span>
+                  </td>
+                  <td style={{ padding: "14px 16px", color: "#374151" }}>{log.description}</td>
+                  <td style={{ padding: "14px 16px", color: "#9CA3AF", fontFamily: "monospace" }}>{log.ip_address || "0.0.0.0"}</td>
+                </tr>
+              );
+            }) : (
+              <tr><td colSpan="5" style={{ padding: "40px", textAlign: "center", color: "#9CA3AF" }}>No logged activities found in this system cycle.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
