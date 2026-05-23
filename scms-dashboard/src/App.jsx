@@ -357,7 +357,7 @@ function DashboardPage({ toast, onNavigate }) {
 }
 // ─── INVENTORY PAGE ───────────────────────────────────────────────────────────
 
-function InventoryPage({ toast }) {
+function InventoryPage({ user, toast }) {
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState("");
@@ -377,10 +377,8 @@ function InventoryPage({ toast }) {
     supplier_id: "",
   });
 
-  // Form State for Outbound Stock Deductions
   const [dispatchForm, setDispatchForm] = useState({ product_id: "", quantity: "", reason: "Customer Sale" });
 
-  // 1. DATA FETCHING (Handles Laravel Pagination wrappers)
   const fetchInitialData = async () => {
     setLoading(true);
     try {
@@ -406,14 +404,12 @@ function InventoryPage({ toast }) {
     fetchInitialData();
   }, [toast]);
 
-  // 2. SEARCH FILTERING
   const filtered = products.filter(
     (p) =>
       (p.name?.toLowerCase() || "").includes(search.toLowerCase()) ||
       (p.sku?.toLowerCase() || "").includes(search.toLowerCase())
   );
 
-  // 3. HANDLERS
   const openAdd = () => {
     setEditing(null);
     setForm({ name: "", sku: "", category: "", stock: "", reorder: "", unit_price: "", supplier_id: "" });
@@ -462,7 +458,7 @@ function InventoryPage({ toast }) {
         toast("Product added successfully", "success");
       }
       setShowModal(false);
-      fetchInitialData(); // Refresh values to pull relational data updates safely
+      fetchInitialData();
     } catch (err) {
       toast("Check validation: SKU must be unique", "error");
     }
@@ -484,7 +480,6 @@ function InventoryPage({ toast }) {
     });
   };
 
-  // 4. OUTBOUND DISPATCH TRANSACTION SUBMIT
   const handleDispatchSubmit = async (e) => {
     e.preventDefault();
     if (!dispatchForm.product_id || !dispatchForm.quantity) {
@@ -502,7 +497,7 @@ function InventoryPage({ toast }) {
       toast("Stock successfully dispatched", "success");
       setShowDispatchModal(false);
       setDispatchForm({ product_id: "", quantity: "", reason: "Customer Sale" });
-      fetchInitialData(); // Force instant quantity sync across layout lines
+      fetchInitialData();
     } catch (err) {
       toast(err.response?.data?.message || "Dispatch transaction failed", "error");
     }
@@ -512,21 +507,18 @@ function InventoryPage({ toast }) {
 
   return (
     <div>
-      {/* HEADER SECTION */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#111827" }}>Inventory Management</h2>
           <p style={{ margin: "4px 0 0", color: "#6B7280", fontSize: 14 }}>{products.length} products tracked</p>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
-          {/* Dispatch Button */}
           <button 
             onClick={() => setShowDispatchModal(true)} 
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", background: "#DC2626", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
           >
             <i className="ti ti-minus" /> Dispatch Stock (Outbound)
           </button>
-          {/* Create Product Button */}
           <button 
             onClick={openAdd} 
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", background: "#1D4ED8", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
@@ -536,7 +528,6 @@ function InventoryPage({ toast }) {
         </div>
       </div>
 
-      {/* SEARCH & TABLE SECTION */}
       <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #E5E7EB", overflow: "hidden" }}>
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6" }}>
           <input placeholder="Search by name or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...inputStyle, maxWidth: 300 }} />
@@ -572,7 +563,11 @@ function InventoryPage({ toast }) {
                     <td style={{ padding: "12px 14px" }}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={() => openEdit(p)} style={{ background: "#EFF6FF", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#1D4ED8", fontSize: 13 }}><i className="ti ti-edit" /></button>
-                        <button onClick={() => handleDelete(p.id)} style={{ background: "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#DC2626", fontSize: 13 }}><i className="ti ti-trash" /></button>
+                        
+                        {/* 🔥 ADMIN-ONLY PROTECTION FOR PRODUCT DELETION */}
+                        {user?.role === "admin" && (
+                          <button onClick={() => handleDelete(p.id)} style={{ background: "#FEF2F2", border: "none", borderRadius: 7, padding: "6px 10px", cursor: "pointer", color: "#DC2626", fontSize: 13 }}><i className="ti ti-trash" /></button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -583,7 +578,6 @@ function InventoryPage({ toast }) {
         </div>
       </div>
 
-      {/* CRUD MANAGED FORM MODAL */}
       {showModal && (
         <Modal title={editing ? "Edit Product" : "Add New Product"} onClose={() => setShowModal(false)}>
           <Field label="Product Name">
@@ -619,13 +613,11 @@ function InventoryPage({ toast }) {
         </Modal>
       )}
 
-      {/* OUTBOUND STOCK DISPATCH MODAL */}
       {showDispatchModal && (
         <div style={overlayStyle}>
           <div style={modalBoxStyle}>
             <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 600, color: "#111827" }}>Deduct Warehouse Inventory</h3>
             <form onSubmit={handleDispatchSubmit}>
-              
               <div style={{ marginBottom: 12 }}>
                 <label style={labelStyle}>Select Product Item</label>
                 <select 
@@ -674,7 +666,6 @@ function InventoryPage({ toast }) {
         </div>
       )}
 
-      {/* CONFIRMATION DIALOG */}
       {confirm && <Confirm message={confirm.msg} onConfirm={confirm.action} onCancel={() => setConfirm(null)} />}
     </div>
   );
@@ -688,7 +679,7 @@ const cancelStyle = { padding: "9px 20px", borderRadius: 8, border: "1px solid #
 const saveStyle = { padding: "9px 20px", borderRadius: 8, border: "none", background: "#1D4ED8", color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 500 };
 const dispatchSubmitStyle = { padding: "9px 16px", borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", fontWeight: 500, cursor: "pointer", fontSize: 14 };
 
-function OrdersPage({ toast }) {
+function OrdersPage({ user, toast }) {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -723,7 +714,6 @@ function OrdersPage({ toast }) {
     loadData();
   }, [toast]);
 
-  // Simplified Filter Logic (Removed 'shipped')
   const filtered = Array.isArray(orders) 
     ? (filter === "all" ? orders : orders.filter((o) => o.status === filter))
     : [];
@@ -809,7 +799,6 @@ function OrdersPage({ toast }) {
         </button>
       </div>
 
-      {/* Filter Tabs (Removed 'shipped') */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {["all", "pending", "approved", "delivered", "rejected"].map((s) => (
           <button key={s} onClick={() => setFilter(s)} style={{ padding: "7px 16px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: filter === s ? "#1D4ED8" : "#F3F4F6", color: filter === s ? "#fff" : "#6B7280", textTransform: "capitalize" }}>
@@ -847,7 +836,9 @@ function OrdersPage({ toast }) {
                         <button onClick={() => handleAction(o.id, "rejected")} style={{ padding: "5px 12px", background: "#FEE2E2", border: "none", borderRadius: 7, color: "#991B1B", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Reject</button>
                       </div>
                     )}
-                    {(o.status === "delivered" || o.status === "rejected") && (
+                    
+                    {/* 🔥 ADMIN-ONLY PROTECTION FOR ORDER RECORD DELETION */}
+                    {(o.status === "delivered" || o.status === "rejected") && user?.role === "admin" && (
                       <button onClick={() => handleDelete(o.id, o.status)} style={{ padding: "5px 12px", background: "#F3F4F6", border: "1px solid #D1D5DB", borderRadius: 7, color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer" }} title="Delete Record"><i className="ti ti-trash" style={{ marginRight: 4 }} /> Delete</button>
                     )}
                   </td>
@@ -891,7 +882,7 @@ function OrdersPage({ toast }) {
   );
 }
 // ─── DELIVERIES PAGE ──────────────────────────────────────────────────────────
-function DeliveriesPage({ toast }) {
+function DeliveriesPage({ user, toast }) {
   const [deliveries, setDeliveries] = useState([]);
   const [personnel, setPersonnel] = useState([]); 
   const [showModal, setShowModal] = useState(false);
@@ -1070,8 +1061,8 @@ function DeliveriesPage({ toast }) {
                 </span>
                 
                 <div style={{ display: "flex", gap: 6 }}>
-                  {/* CONDITION A: If Delivered or Cancelled, reveal the Delete button option */}
-                  {(d.status === "delivered" || d.status === "cancelled") && (
+                  {/* 🔥 CONDITION A: Show Delete button option ONLY if Delivered/Cancelled AND user role is strict admin */}
+                  {(d.status === "delivered" || d.status === "cancelled") && user?.role === "admin" && (
                     <button 
                       onClick={() => handleDelete(d.id)} 
                       title="Delete Delivery Record"
