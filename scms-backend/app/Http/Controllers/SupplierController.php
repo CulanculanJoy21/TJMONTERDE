@@ -4,12 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Supplier;
+use App\Models\ActivityLog;
+use App\Models\ApprovalRequest;
 
 class SupplierController extends Controller
 {
     public function index(Request $request) 
     {
-        // Adding withCount ensures 'orders_count' is available for the React component
         return response()->json(
             Supplier::withCount('orders')->latest()->paginate(20)
         );
@@ -25,7 +26,28 @@ class SupplierController extends Controller
             'address' => 'nullable|string|max:500',
         ]);
 
-        return response()->json(Supplier::create($data), 201);
+        // 🔥 INTERCEPT MANAGER OPERATIONS FOR ADMINISTRATIVE APPROVAL
+        if ($request->user()->role === 'manager') {
+            ApprovalRequest::create([
+                'user_id' => $request->user()->id,
+                'model_type' => 'Supplier',
+                'action_type' => 'CREATE',
+                'payload' => $data
+            ]);
+            return response()->json(['message' => 'Supplier registration details submitted for Admin review.'], 202);
+        }
+
+        $supplier = Supplier::create($data);
+
+        // LOG ACTIONS SECURELY
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'CREATE',
+            'description' => "Registered new trade partner supplier entry: '{$supplier->name}'",
+            'ip_address' => $request->ip()
+        ]);
+
+        return response()->json($supplier, 201);
     }
 
     public function show(Supplier $supplier)
@@ -49,12 +71,19 @@ class SupplierController extends Controller
 
         $supplier->update($data);
 
+        // RECORD DATA PROFILE EDITS
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'UPDATE',
+            'description' => "Modified profiles information metadata wrapper parameters for supplier '{$supplier->name}'",
+            'ip_address' => $request->ip()
+        ]);
+
         return response()->json($supplier);
     }
 
     public function destroy(Supplier $supplier)
     {
-        // check for active orders before deleting
         $hasActiveOrders = $supplier->orders()
             ->whereIn('status', ['pending', 'approved', 'shipped'])
             ->exists();
@@ -65,7 +94,14 @@ class SupplierController extends Controller
             ], 422);
         }
 
-        $supplier->delete(); // Since SoftDeletes are removed from Model, this is permanent.
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE',
+            'description' => "Permanently purged supplier partner reference context metadata file row: '{$supplier->name}'",
+            'ip_address' => request()->ip()
+        ]);
+
+        $supplier->delete();
 
         return response()->json(['message' => 'Supplier and associated records removed permanently.']);
     }

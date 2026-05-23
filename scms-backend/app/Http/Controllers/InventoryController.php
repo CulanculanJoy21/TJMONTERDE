@@ -6,12 +6,10 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\Notification;
 use App\Models\ActivityLog;
+use App\Models\ApprovalRequest;
 
 class InventoryController extends Controller
 {
-    /**
-     * Dispatch items out of the warehouse (Deduct Stock)
-     */
     public function dispatchStock(Request $request)
     {
         $data = $request->validate([
@@ -20,7 +18,6 @@ class InventoryController extends Controller
             'reason'     => 'required|string|max:255',
         ]);
 
-        // FETCH PRODUCT FIRST SO THE VARIABLE VARIABLE EXISTS FOR DESCRIPTION CALLS
         $product = Product::findOrFail($data['product_id']);
 
         if ($product->stock_qty < $data['quantity']) {
@@ -29,7 +26,17 @@ class InventoryController extends Controller
             ], 422);
         }
 
-        // 🔥 LOG TRANSACTIONS UNDER EXPLICIT 'DISPATCH' LABEL
+        // 🔥 INTERCEPT MANAGER STOCK DISPATCHES
+        if ($request->user()->role === 'manager') {
+            ApprovalRequest::create([
+                'user_id' => $request->user()->id,
+                'model_type' => 'Dispatch',
+                'action_type' => 'DISPATCH',
+                'payload' => $data
+            ]);
+            return response()->json(['message' => 'Stock outbound deduction submitted for Admin review.'], 202);
+        }
+
         ActivityLog::create([
             'user_id' => $request->user()->id,
             'action' => 'DISPATCH',

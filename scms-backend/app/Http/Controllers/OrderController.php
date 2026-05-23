@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Notification;
 use App\Models\Delivery;
+use App\Models\ActivityLog;
+use App\Models\ApprovalRequest;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
@@ -50,11 +52,30 @@ class OrderController extends Controller
             'notes'        => 'nullable|string|max:1000',
         ]);
 
+        // 🔥 INTERCEPT MANAGER OPERATIONS FOR ADMINISTRATIVE APPROVAL
+        if ($request->user()->role === 'manager') {
+            ApprovalRequest::create([
+                'user_id' => $request->user()->id,
+                'model_type' => 'Order',
+                'action_type' => 'CREATE',
+                'payload' => $data
+            ]);
+            return response()->json(['message' => 'Supply procurement request submitted for Admin review.'], 202);
+        }
+
         $data['total_amount'] = $data['qty'] * $data['unit_price'];
         $data['status']       = 'pending';
         $data['created_by']   = $request->user()->id;
 
         $order = Order::create($data);
+
+        // LOG ACTION TO IMMUTABLE AUDIT TRAIL
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'ORDER',
+            'description' => "Placed new supply procurement request Order #{$order->id} for {$order->qty} units",
+            'ip_address' => $request->ip()
+        ]);
 
         Notification::create([
             'type'    => 'order_created',
@@ -68,7 +89,6 @@ class OrderController extends Controller
 
     /**
      * Approve or reject an order.
-     * Logic: If approved, a delivery tracking record is automatically initialized.
      */
     public function updateStatus(Request $request, $id)
     {
@@ -80,14 +100,12 @@ class OrderController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $order, $data) {
-            // Update the Order
             $order->update([
                 'status'      => $data['status'],
                 'reviewed_by' => $request->user()->id,
                 'review_note' => $data['note'] ?? null,
             ]);
 
-            // If Approved, ensure a Delivery record exists
             if ($data['status'] === 'approved') {
                 Delivery::updateOrCreate(
                     ['order_id' => $order->id],
@@ -100,7 +118,15 @@ class OrderController extends Controller
                 );
             }
 
-            // Create Notification
+            // DYNAMICALLY MAP ACTION BADGE TYPE TO FIT THE CHOSEN OPERATION
+            $actionTag = $data['status'] === 'approved' ? 'APPROVE' : ($data['status'] === 'rejected' ? 'REJECT' : 'UPDATE');
+            ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => $actionTag,
+                'description' => ucfirst($data['status']) . " procurement supply request Order #{$order->id}",
+                'ip_address' => $request->ip()
+            ]);
+
             Notification::create([
                 'type'    => 'order_status',
                 'title'   => 'Order Status Updated',
@@ -151,10 +177,16 @@ class OrderController extends Controller
     {
         $order = Order::findOrFail($id);
         
-        // Safety check: Prevent deleting active orders
         if ($order->status === 'pending' || $order->status === 'approved' || $order->status === 'shipped') {
             return response()->json(['message' => 'Cannot delete active orders'], 403);
         }
+
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE',
+            'description' => "Permanently deleted Order #{$order->id} from historical records",
+            'ip_address' => request()->ip()
+        ]);
 
         $order->delete();
         return response()->json(['message' => 'Order deleted successfully']);

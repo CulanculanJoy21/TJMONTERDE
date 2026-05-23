@@ -10,6 +10,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\ApprovalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -29,18 +30,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/auth/profile',   [AuthorizationController::class, 'updateProfile']);
     Route::put('/auth/password',  [AuthController::class, 'changePassword']);
 
-    // ── STRICT ADMINISTRATIVE SECURITY OVERRIDES (Admin Only) ──
+    // ── STRICT ADMINISTRATIVE ROUTING (Admin Only Security Clearance) ──
     Route::middleware('role:admin')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         
-        // Data Destructive Capabilities (Restricted to Admin)
+        // Destructive Controls
         Route::delete('/products/{product}',   [ProductController::class, 'destroy']);
         Route::delete('/orders/{id}',          [OrderController::class, 'destroy']);
         Route::delete('/deliveries/{delivery}', [DeliveryController::class, 'destroy']); 
         Route::delete('/suppliers/{supplier}', [SupplierController::class, 'destroy']);
 
-        // System Auditing
-        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+        // Staged Manager Clearances
+        Route::get('/approvals',               [ApprovalController::class, 'index']);
+        Route::patch('/approvals/{id}/review', [ApprovalController::class, 'review']);
+
+        // Auditing
+        Route::get('/activity-logs',           [ActivityLogController::class, 'index']);
     });
 
     // ── ADMIN / MANAGER SHARED USER DIRECTORY ──
@@ -48,9 +53,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users', function() { return \App\Models\User::all(); });
     });
 
-    // ── ADMIN / MANAGER ONLY (Operational Business Logic) ──
+    // ── ADMIN / MANAGER OPERATIONAL RESOURCE LAYER ──
     Route::middleware('role:admin,manager')->group(function () {
-        // Products / Inventory Management (Excluding Delete)
+        // Products / Inventory Management (Intercepts manager inside controller definitions)
         Route::get('/products',                 [ProductController::class, 'index']);
         Route::post('/products',                [ProductController::class, 'store']);
         Route::get('/products/{product}',       [ProductController::class, 'show']);
@@ -60,14 +65,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::post('/inventory/dispatch',      [InventoryController::class, 'dispatchStock']);
         
-        // Orders Management (Excluding Delete)
+        // Orders Management
         Route::get('/orders',                   [OrderController::class, 'index']);
         Route::post('/orders',                  [OrderController::class, 'store']);
         Route::get('/orders/{order}',           [OrderController::class, 'show']);
         Route::put('/orders/{order}',           [OrderController::class, 'update']);
         Route::patch('/orders/{id}/status',     [OrderController::class, 'updateStatus']);
 
-        // Suppliers Management (Excluding Delete)
+        // Suppliers Management
         Route::get('/suppliers',                [SupplierController::class, 'index']);
         Route::post('/suppliers',               [SupplierController::class, 'store']);
         Route::get('/suppliers/{supplier}',     [SupplierController::class, 'show']);

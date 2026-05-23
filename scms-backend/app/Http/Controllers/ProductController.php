@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\StockHistory;
 use App\Models\Notification;
 use App\Models\ActivityLog;
+use App\Models\ApprovalRequest;
 
 class ProductController extends Controller
 {
@@ -30,9 +31,7 @@ class ProductController extends Controller
             $query->whereColumn('stock_qty', '<=', 'reorder_point');
         }
 
-        $products = $query->orderBy('name')->paginate(20);
-
-        return response()->json($products);
+        return response()->json($query->orderBy('name')->paginate(20));
     }
 
     public function store(Request $request)
@@ -49,9 +48,19 @@ class ProductController extends Controller
             'unit'          => 'nullable|string|max:50',
         ]);
 
+        // 🔥 INTERCEPT MANAGER OPERATIONAL ACTION FOR APPROVAL
+        if ($request->user()->role === 'manager') {
+            ApprovalRequest::create([
+                'user_id' => $request->user()->id,
+                'model_type' => 'Product',
+                'action_type' => 'CREATE',
+                'payload' => $data
+            ]);
+            return response()->json(['message' => 'Product creation submitted for Admin review.'], 202);
+        }
+
         $product = Product::create($data);
 
-        // LOG PRODUCT CREATION TO AUDIT TRAIL
         ActivityLog::create([
             'user_id' => $request->user()->id,
             'action' => 'CREATE',
@@ -90,9 +99,20 @@ class ProductController extends Controller
             'unit'          => 'nullable|string|max:50',
         ]);
 
+        // 🔥 INTERCEPT MANAGER UPDATES
+        if ($request->user()->role === 'manager') {
+            ApprovalRequest::create([
+                'user_id' => $request->user()->id,
+                'model_type' => 'Product',
+                'action_type' => 'UPDATE',
+                'model_id' => $product->id,
+                'payload' => $data
+            ]);
+            return response()->json(['message' => 'Product updates submitted for Admin review.'], 202);
+        }
+
         $product->update($data);
 
-        // LOG PRODUCT COMPONENT EDITS TO AUDIT TRAIL
         ActivityLog::create([
             'user_id' => $request->user()->id,
             'action' => 'UPDATE',
@@ -105,7 +125,6 @@ class ProductController extends Controller
 
     public function destroy(Product $product)
     {
-        // LOG PRODUCT DELETION TO AUDIT TRAIL BEFORE WIPING REFS
         ActivityLog::create([
             'user_id' => auth()->id(),
             'action' => 'DELETE',
@@ -114,7 +133,6 @@ class ProductController extends Controller
         ]);
 
         $product->delete();
-
         return response()->json(['message' => 'Product deleted successfully.']);
     }
 
@@ -135,7 +153,6 @@ class ProductController extends Controller
 
         $product->update(['stock_qty' => $newStock]);
 
-        // LOG INDIVIDUAL STOCK ADJUSTMENT TYPE CHROMATICALLY
         $actionWord = $data['type'] === 'add' ? 'RESTOCK' : 'DEDUCT';
         ActivityLog::create([
             'user_id' => $request->user()->id,
@@ -170,11 +187,7 @@ class ProductController extends Controller
 
     public function stockHistory(Product $product)
     {
-        $history = $product->stockHistories()
-            ->with('user:id,name')
-            ->latest()
-            ->paginate(30);
-
+        $history = $product->stockHistories()->with('user:id,name')->latest()->paginate(30);
         return response()->json($history);
     }
 }
