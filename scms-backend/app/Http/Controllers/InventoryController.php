@@ -10,7 +10,6 @@ class InventoryController extends Controller
 {
     /**
      * Dispatch items out of the warehouse (Deduct Stock)
-     * Make sure this exact name matches your routes/api.php file
      */
     public function dispatchStock(Request $request)
     {
@@ -21,22 +20,29 @@ class InventoryController extends Controller
             'reason'     => 'required|string|max:255',
         ]);
 
+        // 🔥 FIX: Move the product look-up ABOVE the activity logging line
         // 2. Fetch the product record
         $product = Product::findOrFail($data['product_id']);
 
-        // 3. Safety Check: Verify stock availability
-        // NOTE: If your column name is 'stock' instead of 'stock_qty', change it here
+        // 3. Log the Activity safely now that $product is available
+        \App\Models\ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'CREATE',
+            'description' => "Dispatched {$data['quantity']} units of '{$product->name}' (Reason: {$data['reason']})",
+            'ip_address' => $request->ip()
+        ]);
+
+        // 4. Safety Check: Verify stock availability
         if ($product->stock_qty < $data['quantity']) {
             return response()->json([
                 'message' => "Stockout danger! Only {$product->stock_qty} units available."
             ], 422);
         }
 
-        // 4. Decrement the value in the database
-        // NOTE: If your column name is 'stock' instead of 'stock_qty', change it here as well
+        // 5. Decrement the value in the database
         $product->decrement('stock_qty', $data['quantity']);
 
-        // 5. Create an automated activity notification if stock hits reorder point
+        // 6. Create an automated activity notification if stock hits reorder point
         if ($product->fresh()->stock_qty <= $product->reorder_point) {
             Notification::create([
                 'title' => 'Low Stock Warning',
@@ -49,6 +55,5 @@ class InventoryController extends Controller
             'message' => 'Stock successfully dispatched.',
             'product' => $product->fresh()
         ], 200);
-    } // <--- Make sure this closing bracket is HERE
-
-} // <--- This bracket closes the whole Controller class
+    } 
+}

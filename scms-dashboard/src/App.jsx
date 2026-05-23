@@ -904,32 +904,35 @@ function DeliveriesPage({ toast }) {
 
   const steps = ["pending", "in_transit", "out_for_delivery", "delivered"];
 
-  // 1. DATA FETCHING
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [delRes, userRes] = await Promise.all([
-          api.get("/deliveries"),
-          api.get("/users") 
-        ]);
-        
-        const delItems = delRes.data?.data || delRes.data || [];
-        setDeliveries(delItems);
+  // 1. DATA REFRESH FUNCTION
+  const fetchDeliveriesData = async () => {
+    try {
+      const [delRes, userRes] = await Promise.all([
+        api.get("/deliveries"),
+        api.get("/users") 
+      ]);
+      
+      const delItems = delRes.data?.data || delRes.data || [];
+      setDeliveries(delItems);
 
-        // Filter users to only show field personnel
-        const drivers = (Array.isArray(userRes) ? userRes : []).filter(
-          u => u.role === "field_personnel" || u.role === "personnel"
-        );
-        setPersonnel(drivers);
-      } catch (err) {
-        console.error("Fetch error:", err);
-        toast("Could not load tracking or personnel data", "error");
-      } finally {
-        setTimeout(() => setLoading(false), 300);
-      }
+      // Filter users to only show field personnel
+      const drivers = (Array.isArray(userRes) ? userRes : []).filter(
+        u => u.role === "field_personnel" || u.role === "personnel"
+      );
+      setPersonnel(drivers);
+    } catch (err) {
+      console.error("Fetch error:", err);
+      toast("Could not load tracking or personnel data", "error");
+    }
+  };
+
+  useEffect(() => {
+    const initData = async () => {
+      setLoading(true);
+      await fetchDeliveriesData();
+      setTimeout(() => setLoading(false), 300);
     };
-    fetchData();
+    initData();
   }, [toast]);
 
   // 2. HANDLERS
@@ -973,6 +976,22 @@ function DeliveriesPage({ toast }) {
     }
   };
 
+  // NEW HANDLER: Submits structural DELETE request directly to Laravel
+  const handleDelete = async (id) => {
+    if (!window.confirm(`Are you sure you want to permanently delete tracking record TRK-${id}?`)) return;
+
+    try {
+      await api.delete(`/deliveries/${id}`);
+      toast(`Tracking record TRK-${id} successfully removed`, "success");
+      
+      // Update local array state to remove the card instantly
+      setDeliveries(prev => prev.filter(d => d.id !== id));
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast(err.response?.data?.message || "Failed to remove delivery record.", "error");
+    }
+  };
+
   // 3. GUARD CLAUSE
   if (loading) return <Loading />;
 
@@ -988,58 +1007,76 @@ function DeliveriesPage({ toast }) {
         {deliveries.length > 0 ? deliveries.map((d) => {
           const stepIdx = steps.indexOf(d.status);
           return (
-            <div key={d.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #E5E7EB", padding: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: "#1D4ED8", fontSize: 15, fontFamily: "monospace" }}>TRK-{d.id}</div>
-                  <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>Order ID: #{d.order_id}</div>
+            <div key={d.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #E5E7EB", padding: 20, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: "#1D4ED8", fontSize: 15, fontFamily: "monospace" }}>TRK-{d.id}</div>
+                    <div style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>Order ID: #{d.order_id}</div>
+                  </div>
+                  <StatusBadge status={d.status} />
                 </div>
-                <StatusBadge status={d.status} />
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16, fontSize: 13 }}>
+                  <div>
+                    <span style={{ color: "#9CA3AF" }}>Driver: </span>
+                    <span style={{ color: "#374151", fontWeight: 500 }}>
+                      {d.driver?.name || d.driver_name || "Unassigned"}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#9CA3AF" }}>ETA: </span>
+                    <span style={{ color: "#374151" }}>
+                      {d.eta ? new Date(d.eta).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "TBD"}
+                    </span>
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}><span style={{ color: "#9CA3AF" }}>To: </span><span style={{ color: "#374151" }}>{d.destination}</span></div>
+                </div>
+
+                {/* Transit Progress bar */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+                  {steps.map((s, i) => (
+                    <div key={s} style={{ 
+                      flex: 1, height: 4, borderRadius: 4, 
+                      background: i <= stepIdx ? (d.status === "delivered" ? "#059669" : "#1D4ED8") : "#E5E7EB",
+                      transition: "all 0.3s ease"
+                    }} />
+                  ))}
+                </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16, fontSize: 13 }}>
-                <div>
-                  <span style={{ color: "#9CA3AF" }}>Driver: </span>
-                  <span style={{ color: "#374151", fontWeight: 500 }}>
-                    {d.driver?.name || d.driver_name || "Unassigned"}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: "#9CA3AF" }}>ETA: </span>
-                  <span style={{ color: "#374151" }}>
-                    {d.eta ? new Date(d.eta).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : "TBD"}
-                  </span>
-                </div>
-                <div style={{ gridColumn: "1/-1" }}><span style={{ color: "#9CA3AF" }}>To: </span><span style={{ color: "#374151" }}>{d.destination}</span></div>
-              </div>
-
-              {/* Transit Progress bar */}
-              <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-                {steps.map((s, i) => (
-                  <div key={s} style={{ 
-                    flex: 1, height: 4, borderRadius: 4, 
-                    background: i <= stepIdx ? (d.status === "delivered" ? "#059669" : "#1D4ED8") : "#E5E7EB",
-                    transition: "all 0.3s ease"
-                  }} />
-                ))}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
                 <span style={{ fontSize: 11, color: "#9CA3AF" }}>
                   Last Update: {d.updated_at ? new Date(d.updated_at).toLocaleTimeString() : "Just now"}
                 </span>
-                {d.status !== "delivered" && (
-                  <button onClick={() => openUpdate(d)} style={{ padding: "5px 14px", background: "#EFF6FF", border: "none", borderRadius: 7, color: "#1D4ED8", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-                    Update Tracking
-                  </button>
-                )}
+                
+                <div style={{ display: "flex", gap: 6 }}>
+                  {/* Safely blocks delete option if the status has completed processing */}
+                  {d.status !== "delivered" && (
+                    <>
+                      <button 
+                        onClick={() => handleDelete(d.id)} 
+                        title="Delete Delivery Record"
+                        style={{ padding: "6px 10px", background: "#FEF2F2", border: "none", borderRadius: 7, color: "#DC2626", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center" }}
+                      >
+                        Delete
+                      </button>
+                      <button 
+                        onClick={() => openUpdate(d)} 
+                        style={{ padding: "6px 12px", background: "#EFF6FF", border: "none", borderRadius: 7, color: "#1D4ED8", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                      >
+                        Update Tracking
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           );
         }) : (
-            <div style={{ gridColumn: "1/-1", padding: "60px", textAlign: "center", background: "#fff", borderRadius: 14, border: "1px dashed #D1D5DB", color: "#9CA3AF" }}>
-                No active deliveries tracked.
-            </div>
+          <div style={{ gridColumn: "1/-1", padding: "60px", textAlign: "center", background: "#fff", borderRadius: 14, border: "1px dashed #D1D5DB", color: "#9CA3AF" }}>
+            No active deliveries tracked.
+          </div>
         )}
       </div>
 
@@ -1081,6 +1118,7 @@ function DeliveriesPage({ toast }) {
     </div>
   );
 }
+
 // ─── SUPPLIERS PAGE ───────────────────────────────────────────────────────────
 function SuppliersPage({ toast }) {
   const [suppliers, setSuppliers] = useState([]);
@@ -1641,8 +1679,8 @@ export default function App() {
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // Set up polling to check for new alerts in Valencia City every 10 seconds
-      const interval = setInterval(fetchNotifications, 10000);
+      // Set up polling to check for new alerts in Valencia City every 5 seconds
+      const interval = setInterval(fetchNotifications, 5000);
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -1695,7 +1733,8 @@ export default function App() {
     users: user?.role === "admin" ? UserManagementPage : DashboardPage, 
     deliveries: DeliveriesPage, 
     suppliers: SuppliersPage, 
-    reports: ReportsPage 
+    reports: ReportsPage,
+    logs: user?.role === "admin" ? ActivityLogsPage : DashboardPage
   };
 
   const PageComponent = pages[page] || DashboardPage;
@@ -1748,6 +1787,19 @@ export default function App() {
             >
               <i className="ti ti-users" style={{ fontSize: 18 }} />
               {sidebarOpen && <span style={{ fontSize: 13, fontWeight: 500 }}>User Management</span>}
+            </button>
+          )}
+          {user?.role === "admin" && (
+            <button 
+              onClick={() => setPage("logs")}
+              style={{ 
+                width: "100%", display: "flex", alignItems: "center", gap: 10, padding: sidebarOpen ? "10px 12px" : "10px", 
+                borderRadius: 9, border: "none", cursor: "pointer", 
+                background: page === "logs" ? "#1D4ED8" : "transparent", color: page === "logs" ? "#fff" : "#9CA3AF"
+              }}
+            >
+              <i className="ti ti-clipboard-list" style={{ fontSize: 18 }} />
+              {sidebarOpen && <span style={{ fontSize: 13, fontWeight: 500 }}>Activity Logs</span>}
             </button>
           )}
         </nav>

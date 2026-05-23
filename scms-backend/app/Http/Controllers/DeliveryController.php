@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Delivery;
 use App\Models\Notification;
+use App\Models\ActivityLog; // Imported model cleanly at top
 
 class DeliveryController extends Controller
 {
@@ -40,6 +41,14 @@ class DeliveryController extends Controller
 
         $delivery = Delivery::create($data);
 
+        // LOG CREATION
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'CREATE',
+            'description' => "Created tracking record TRK-{$delivery->id} for Order #{$delivery->order_id}",
+            'ip_address' => $request->ip()
+        ]);
+
         return response()->json($delivery->load(['order.product:id,name', 'driver:id,name']), 201);
     }
 
@@ -66,23 +75,42 @@ class DeliveryController extends Controller
 
     public function destroy(Delivery $delivery)
     {
+        // Safety Check: Prevent deleting records that have already updated stock
+        if ($delivery->status === 'delivered') {
+            return response()->json([
+                'message' => 'Cannot delete a tracking record for a completed delivery.'
+            ], 422);
+        }
+
+        // LOG DELETION
+        ActivityLog::create([
+            'user_id' => auth()->id(),
+            'action' => 'DELETE',
+            'description' => "Deleted tracking record TRK-{$delivery->id} for Order #{$delivery->order_id}",
+            'ip_address' => request()->ip()
+        ]);
+
         $delivery->delete();
 
-        return response()->json(['message' => 'Delivery record deleted.']);
+        return response()->json(['message' => 'Delivery record deleted successfully.']);
     }
 
     /**
      * Update delivery status and assignments.
      */
     public function updateStatus(Request $request, Delivery $delivery)
-{
-    $data = $request->validate([
-        'status'    => 'required|in:pending,in_transit,out_for_delivery,delivered',
-        'location'  => 'nullable|string|max:255',
-        'note'      => 'nullable|string|max:500',
-        'driver_id' => 'nullable|exists:users,id',
-        'eta'       => 'nullable|date', // Changed from estimated_delivery
-    ]);
+    {
+        $data = $request->validate([
+            'status'    => 'required|in:pending,in_transit,out_for_delivery,delivered',
+            'location'  => 'nullable|string|max:255',
+            'note'      => 'nullable|string|max:500',
+            'driver_id' => 'nullable|exists:users,id',
+            'eta'       => 'nullable|date',
+        ]);
+
+        // Keep track of the previous status before modifying the object row
+        $oldStatus = strtoupper(str_replace('_', ' ', $delivery->status));
+        $newStatus = strtoupper(str_replace('_', ' ', $data['status']));
 
         // Only process stock and notifications if the status is CHANGING to delivered
         if ($data['status'] === 'delivered' && $delivery->status !== 'delivered') {
@@ -104,16 +132,24 @@ class DeliveryController extends Controller
 
         // Update with the new assignment fields
         $delivery->update([
-        'status'           => $data['status'],
-        'driver_id'        => $data['driver_id'] ?? $delivery->driver_id,
-        'eta'              => $data['eta'] ?? $delivery->eta, // Matches your DB column
-        'current_location' => $data['location'] ?? $delivery->current_location,
-        'notes'            => $data['note'] ?? $delivery->notes,
-        'delivered_at'     => $data['status'] === 'delivered' ? now() : $delivery->delivered_at,
-    ]);
+            'status'           => $data['status'],
+            'driver_id'        => $data['driver_id'] ?? $delivery->driver_id,
+            'eta'              => $data['eta'] ?? $delivery->eta, 
+            'current_location' => $data['location'] ?? $delivery->current_location,
+            'notes'            => $data['note'] ?? $delivery->notes,
+            'delivered_at'     => $data['status'] === 'delivered' ? now() : $delivery->delivered_at,
+        ]);
+        
+        // LOG STATUS CHANGE
+        ActivityLog::create([
+            'user_id' => $request->user()->id,
+            'action' => 'UPDATE',
+            'description' => "Changed status of delivery TRK-{$delivery->id} from {$oldStatus} to {$newStatus}",
+            'ip_address' => $request->ip()
+        ]);
 
-    return response()->json($delivery->load(['order.product:id,name', 'driver:id,name']));
-}
+        return response()->json($delivery->load(['order.product:id,name', 'driver:id,name']));
+    }
 
     /**
      * Delivery report.

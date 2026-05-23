@@ -9,6 +9,7 @@ use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\ActivityLogController; // Added for audit logging
 
 /*
 |--------------------------------------------------------------------------
@@ -26,7 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Auth, Profile & Identity ──
     Route::post('/auth/logout',   [AuthController::class, 'logout']);
     Route::get('/auth/me',        [AuthController::class, 'me']);
-    Route::put('/auth/profile',   [AuthController::class, 'updateProfile']);
+    Route::put('/auth/profile',   [AuthorizationController::class, 'updateProfile']);
     Route::put('/auth/password',  [AuthController::class, 'changePassword']);
 
     // ── ADMIN ONLY (User & Team Management) ──
@@ -34,6 +35,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Only an Admin can create new accounts (Managers, Drivers, etc.)
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::get('/users', function() { return \App\Models\User::all(); });
+        
+        // ── ADDED: SECURITY AUDIT ENDPOINT ───────────────────────────────────
+        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+        // ─────────────────────────────────────────────────────────────────────
     });
 
     // ── ADMIN / MANAGER ONLY (Business Logic & Inventory) ──
