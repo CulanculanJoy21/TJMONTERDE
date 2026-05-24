@@ -191,10 +191,11 @@ class DeliveriesFragment : Fragment() {
                     showStatusPicker(delivery)
                 }
             },
+            // 🛠️ FIXED: Standardized the confirmation dialog alert message to match your TRK nomenclature system
             onDeleteDelivery = { delivery ->
                 AlertDialog.Builder(requireContext())
                     .setTitle("Remove Tracking Record")
-                    .setMessage("Permanently remove delivery tracking trace record DEL-${delivery.id} from local logs?")
+                    .setMessage("Permanently remove delivery tracking trace record TRK-${delivery.id} from local logs?")
                     .setPositiveButton("Remove") { _, _ -> viewModel.deleteDelivery(delivery.id) }
                     .setNegativeButton("Cancel", null)
                     .show()
