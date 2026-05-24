@@ -11,13 +11,14 @@ class DeliveryController extends Controller
 {
     public function index(Request $request)
     {
-        // 🛠️ FIXED: Added foreign keys (product_id, supplier_id) so the data hooks don't fail
+        // 🛠️ FIXED: Eager load relations with explicit keys so nested objects don't return null
         $query = Delivery::with([
             'order' => function($q) {
-                $q->select('id', 'product_id', 'supplier_id', 'qty', 'status', 'total_amount', 'created_at');
+                // Must select 'id' and the connecting foreign keys for children to load
+                $q->select('id', 'product_id', 'supplier_id', 'qty', 'status');
             },
-            'order.product:id,name,sku', 
-            'order.supplier:id,name', 
+            'order.product:id,name,sku', // Keeps selection lightweight but operational
+            'order.supplier:id,name',
             'driver:id,name'
         ]);
 
