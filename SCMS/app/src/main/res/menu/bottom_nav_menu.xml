@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/nav_dashboard"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:title="Dashboard" />
+
+    <item
+        android:id="@+id/nav_inventory"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="Inventory" />
+
+    <item
+        android:id="@+id/nav_orders"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="Orders" />
+
+    <item
+        android:id="@+id/nav_deliveries"
+        android:icon="@android:drawable/ic_menu_directions"
+        android:title="Deliveries" />
+
+    <item
+        android:id="@+id/nav_suppliers"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="Suppliers" />
+
+</menu>

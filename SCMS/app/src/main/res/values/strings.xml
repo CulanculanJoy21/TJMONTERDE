@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SCMS</string>
+    <string name="app_full_name">Supply Chain Management System</string>
+
+    <!-- Nav labels -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_inventory">Inventory</string>
+    <string name="nav_orders">Orders</string>
+    <string name="nav_deliveries">Deliveries</string>
+    <string name="nav_suppliers">Suppliers</string>
+
+    <!-- Actions -->
+    <string name="action_logout">Logout</string>
+    <string name="action_add">Add</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_update">Update</string>
+    <string name="action_approve">Approve</string>
+    <string name="action_reject">Reject</string>
+
+    <!-- Status labels -->
+    <string name="status_pending">Pending</string>
+    <string name="status_approved">Approved</string>
+    <string name="status_shipped">Shipped</string>
+    <string name="status_delivered">Delivered</string>
+    <string name="status_rejected">Rejected</string>
+    <string name="status_in_transit">In Transit</string>
+    <string name="status_out_for_delivery">Out for Delivery</string>
+
+    <!-- Messages -->
+    <string name="msg_loading">Loading…</string>
+    <string name="msg_no_data">No data found</string>
+    <string name="msg_network_error">Network error. Check your connection.</string>
+    <string name="msg_login_failed">Invalid email or password</string>
+    <string name="hint_email">Email address</string>
+    <string name="hint_password">Password</string>
+    <string name="btn_sign_in">Sign In</string>
+    <string name="signing_in">Signing in…</string>
+</resources>

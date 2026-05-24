@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res_auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/nav_dashboard">
+
+    <fragment
+        android:id="@+id/nav_dashboard"
+        android:name="com.scms.app.ui.dashboard.DashboardFragment"
+        android:label="Dashboard" />
+
+    <fragment
+        android:id="@+id/nav_inventory"
+        android:name="com.scms.app.ui.inventory.InventoryFragment"
+        android:label="Inventory" />
+
+    <fragment
+        android:id="@+id/nav_orders"
+        android:name="com.scms.app.ui.orders.OrdersFragment"
+        android:label="Orders" />
+
+    <fragment
+        android:id="@+id/nav_deliveries"
+        android:name="com.scms.app.ui.deliveries.DeliveriesFragment"
+        android:label="Deliveries" />
+
+    <fragment
+        android:id="@+id/nav_suppliers"
+        android:name="com.scms.app.ui.suppliers.SuppliersFragment"
+        android:label="Suppliers" />
+
+</navigation>
