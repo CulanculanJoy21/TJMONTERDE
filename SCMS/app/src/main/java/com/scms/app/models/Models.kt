@@ -53,7 +53,7 @@ data class ProductRequest(
 data class StockAdjustRequest(
     val type: String,  // "add" or "remove"
     val qty: Int,
-    val note: String? = null
+    @SerializedName("note") val note: String? = null // 🛠️ FIXED: Standardized field serialized mapping name
 )
 
 // ─── SUPPLIER ─────────────────────────────────────────────────────────────────
@@ -120,9 +120,10 @@ data class OrderStatusRequest(
 
 data class Delivery(
     val id: Int,
+    @SerializedName("order_id") val orderId: Int, // 🛠️ ADDED: Backup direct key mapping parameter
     val order: OrderBrief?,
     val driver: UserBrief?,
-    val status: String,   // pending | in_transit | out_for_delivery | delivered
+    val status: String,   // pending | in_transit | out_for_delivery | delivered | cancelled
     val destination: String,
     @SerializedName("current_location") val currentLocation: String?,
     val eta: String?,
@@ -133,6 +134,7 @@ data class Delivery(
 
 data class OrderBrief(
     val id: Int,
+    @SerializedName("product_id") val productId: Int?, // 🛠️ ADDED: Foreign relational key parameter mapping
     val product: ProductBrief?
 )
 
@@ -180,6 +182,16 @@ data class DashboardStats(
     @SerializedName("orders_this_month") val ordersThisMonth: Int,
     @SerializedName("recent_orders")     val recentOrders: List<Order>,
     @SerializedName("activity_feed")     val activityFeed: List<Notification>
+)
+
+data class ApprovalRequestMobile(
+    val id: Int,
+    @SerializedName("user_id") val userId: Int,
+    @SerializedName("model_type") val modelType: String,
+    @SerializedName("action_type") val actionType: String,
+    val payload: Map<String, Any>,
+    @SerializedName("created_at") val createdAt: String,
+    val user: UserBrief?
 )
 
 // ─── GENERIC API RESPONSE ─────────────────────────────────────────────────────

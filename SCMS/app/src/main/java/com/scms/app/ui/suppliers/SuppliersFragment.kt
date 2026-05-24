@@ -23,8 +23,6 @@ import com.scms.app.models.SupplierRequest
 import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 
-// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
-
 class SuppliersViewModel : ViewModel() {
     val suppliers = MutableLiveData<Resource<List<Supplier>>>()
     val deleteResult = MutableLiveData<Resource<Unit>>()
@@ -53,10 +51,9 @@ class SuppliersViewModel : ViewModel() {
     }
 }
 
-// ─── ADAPTER ─────────────────────────────────────────────────────────────────
-
 class SupplierAdapter(
     private var items: List<Supplier>,
+    private val userRole: String?, // 🛠️ Access scope tracking prop injection
     private val onEdit: (Supplier) -> Unit,
     private val onDelete: (Supplier) -> Unit
 ) : RecyclerView.Adapter<SupplierAdapter.VH>() {
@@ -78,8 +75,17 @@ class SupplierAdapter(
             tvActiveOrders.text = "${s.activeOrders ?: 0} active orders"
             tvRating.text       = "★ ${s.rating}"
 
-            btnEdit.setOnClickListener   { onEdit(s) }
-            btnDelete.setOnClickListener { onDelete(s) }
+            // 🛠️ Restrict partner information mutations to Admins
+            val role = userRole?.lowercase() ?: "field_personnel"
+            if (role == "admin") {
+                btnEdit.show()
+                btnDelete.show()
+                btnEdit.setOnClickListener   { onEdit(s) }
+                btnDelete.setOnClickListener { onDelete(s) }
+            } else {
+                btnEdit.hide()
+                btnDelete.hide()
+            }
         }
     }
 
@@ -88,8 +94,6 @@ class SupplierAdapter(
         notifyDataSetChanged()
     }
 }
-
-// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class SuppliersFragment : Fragment() {
 
@@ -106,15 +110,17 @@ class SuppliersFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        val session = SessionManager(requireContext())
+
         adapter = SupplierAdapter(
             emptyList(),
+            userRole = session.user?.role, // 🛠️ Pass active role string downstream
             onEdit   = { supplier -> SupplierFormDialog(supplier) { viewModel.load() }.show(childFragmentManager, "edit_supplier") },
             onDelete = { supplier -> confirmDelete(supplier) }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
-
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
         binding.fabAdd.setOnClickListener {
@@ -137,11 +143,7 @@ class SuppliersFragment : Fragment() {
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
-                is Resource.Error -> {
-                    binding.progressBar.hide()
-                    binding.swipeRefresh.isRefreshing = false
-                    toast(state.message)
-                }
+                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
             }
         }
 
@@ -165,8 +167,6 @@ class SuppliersFragment : Fragment() {
     override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }
 
-// ─── FORM DIALOG ──────────────────────────────────────────────────────────────
-
 class SupplierFormDialog(
     private val supplier: Supplier?,
     private val onSuccess: () -> Unit
@@ -182,7 +182,6 @@ class SupplierFormDialog(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         binding.tvTitle.text = if (supplier != null) "Edit Supplier" else "Add Supplier"
 
         supplier?.let {
@@ -227,7 +226,18 @@ class SupplierFormDialog(
             binding.btnSave.isEnabled = true
             when (result) {
                 is Resource.Success -> { toast(if (supplier != null) "Supplier updated" else "Supplier added"); onSuccess(); dismiss() }
-                is Resource.Error   -> toast(result.message)
+                is Resource.Error -> {
+                    // 🛠️ Intercept HTTP 202 validation strings smoothly for pending manager creations
+                    if (result.message.contains("submitted for Admin review", ignoreCase = true) || result.message.contains("202")) {
+                        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Review Pending")
+                            .setMessage("Supplier details submitted to the Admin Approvals Staging Queue.")
+                            .setPositiveButton("OK") { _, _ -> onSuccess(); dismiss() }
+                            .show()
+                    } else {
+                        toast(result.message)
+                    }
+                }
                 else -> {}
             }
         }

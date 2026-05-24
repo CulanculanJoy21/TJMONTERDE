@@ -42,20 +42,29 @@ class MainActivity : AppCompatActivity() {
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
 
+        // 🛠️ FIXED: Added the missing comma right before the new approvals menu ID entry token
         appBarConfig = AppBarConfiguration(
             setOf(
                 R.id.nav_dashboard,
                 R.id.nav_inventory,
                 R.id.nav_orders,
                 R.id.nav_deliveries,
-                R.id.nav_suppliers
+                R.id.nav_suppliers,
+                R.id.nav_approvals
             )
         )
 
         setupActionBarWithNavController(navController, appBarConfig)
         binding.bottomNavView.setupWithNavController(navController)
 
-        // Hide suppliers for field personnel
+        // 🛠️ SECURITY VISIBILITY: Enforce role-based tab rendering directly on the BottomNav view structure
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
+
+        if (role != "admin") {
+            binding.bottomNavView.menu.findItem(R.id.nav_approvals)?.isVisible = false
+        }
+
+        // Hide suppliers for field personnel / drivers
         if (!session.isAdminOrManager) {
             binding.bottomNavView.menu.findItem(R.id.nav_suppliers)?.isVisible = false
         }
@@ -66,14 +75,20 @@ class MainActivity : AppCompatActivity() {
     private fun startNotificationPolling() {
         lifecycleScope.launch {
             while (isActive) {
+                // Terminate background threads instantly if logging out or cleared
+                if (!session.isLoggedIn) {
+                    break
+                }
+
                 try {
                     val result = safeApiCall { RetrofitClient.instance.getNotifications() }
                     if (result is Resource.Success) {
-                        val unread = result.data.data.count { it.readAt == null }
+                        val unread = result.data.data.count { !it.isRead }
                         runOnUiThread { updateNotificationBadge(unread) }
                     }
                 } catch (_: Exception) {}
-                delay(30_000)
+
+                delay(30_000) // Poll safely every 30 seconds
             }
         }
     }

@@ -11,7 +11,15 @@ class DeliveryController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Delivery::with(['order.product:id,name,sku', 'order.supplier:id,name', 'driver:id,name']);
+        // 🛠️ FIXED: Added foreign keys (product_id, supplier_id) so the data hooks don't fail
+        $query = Delivery::with([
+            'order' => function($q) {
+                $q->select('id', 'product_id', 'supplier_id', 'qty', 'status', 'total_amount', 'created_at');
+            },
+            'order.product:id,name,sku', 
+            'order.supplier:id,name', 
+            'driver:id,name'
+        ]);
 
         if ($request->user()->role === 'field_personnel') {
             $query->where('driver_id', $request->user()->id);

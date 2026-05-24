@@ -61,12 +61,8 @@ class LoginActivity : AppCompatActivity() {
 
         session = SessionManager(this)
 
-        // Auto-login if token exists
-        if (session.isLoggedIn) {
-            RetrofitClient.setToken(session.token)
-            goToMain()
-            return
-        }
+        // ⚠️ FIXED: Auto-login logic removed from here!
+        // It is now handled cleanly inside SplashActivity.
 
         binding.btnLogin.setOnClickListener {
             val email    = binding.etEmail.text.toString().trim()

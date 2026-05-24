@@ -103,6 +103,10 @@ interface ScmsApi {
     @PATCH("deliveries/{id}/status")
     suspend fun updateDeliveryStatus(@Path("id") id: Int, @Body request: DeliveryStatusRequest): Response<Delivery>
 
+    // 🛠️ ADDED: Administrative delivery purging node endpoint signature mapping
+    @DELETE("deliveries/{id}")
+    suspend fun deleteDelivery(@Path("id") id: Int): Response<MessageResponse>
+
     // Reports
     @GET("reports/inventory")
     suspend fun getInventoryReport(): Response<Map<String, Any>>
@@ -122,6 +126,15 @@ interface ScmsApi {
 
     @POST("notifications/read-all")
     suspend fun markAllNotificationsRead(): Response<MessageResponse>
+    // Approvals
+    @GET("approvals")
+    suspend fun getPendingApprovals(): Response<List<ApprovalRequestMobile>>
+
+    @PATCH("approvals/{id}/review")
+    suspend fun reviewApproval(
+        @Path("id") id: Int,
+        @Body body: Map<String, String>
+    ): Response<Map<String, Any>>
 }
 
 object RetrofitClient {

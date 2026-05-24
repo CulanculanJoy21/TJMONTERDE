@@ -25,20 +25,15 @@ import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 import androidx.lifecycle.MutableLiveData
 
-// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
-
 class InventoryViewModel : ViewModel() {
     val products = MutableLiveData<Resource<List<Product>>>()
     val deleteResult = MutableLiveData<Resource<Unit>>()
-
     private var allProducts = listOf<Product>()
 
     fun load(search: String? = null, lowStock: Boolean? = null) {
         viewModelScope.launch {
             products.value = Resource.Loading()
-            val result = safeApiCall {
-                RetrofitClient.instance.getProducts(search = search, lowStock = lowStock)
-            }
+            val result = safeApiCall { RetrofitClient.instance.getProducts(search = search, lowStock = lowStock) }
             when (result) {
                 is Resource.Success -> {
                     allProducts = result.data.data
@@ -62,10 +57,9 @@ class InventoryViewModel : ViewModel() {
     }
 }
 
-// ─── ADAPTER ─────────────────────────────────────────────────────────────────
-
 class ProductAdapter(
     private var items: List<Product>,
+    private val userRole: String?, // 🛠️ Track logged session scope bounds
     private val onEdit: (Product) -> Unit,
     private val onDelete: (Product) -> Unit
 ) : RecyclerView.Adapter<ProductAdapter.VH>() {
@@ -97,8 +91,17 @@ class ProductAdapter(
                 tvStock.setTextColor(root.context.getColor(android.R.color.holo_green_dark))
             }
 
-            btnEdit.setOnClickListener { onEdit(p) }
-            btnDelete.setOnClickListener { onDelete(p) }
+            // 🛠️ Restrict mutation controls directly matching dashboard layouts
+            val role = userRole?.lowercase() ?: "field_personnel"
+            if (role == "admin") {
+                btnEdit.show()
+                btnDelete.show()
+                btnEdit.setOnClickListener { onEdit(p) }
+                btnDelete.setOnClickListener { onDelete(p) }
+            } else {
+                btnEdit.hide()
+                btnDelete.hide()
+            }
         }
     }
 
@@ -107,8 +110,6 @@ class ProductAdapter(
         notifyDataSetChanged()
     }
 }
-
-// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class InventoryFragment : Fragment() {
 
@@ -125,15 +126,17 @@ class InventoryFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        val session = SessionManager(requireContext())
+
         adapter = ProductAdapter(
             emptyList(),
+            userRole = session.user?.role, // 🛠️ Pass role downstream
             onEdit   = { product -> ProductFormDialog(product) { viewModel.load() }.show(childFragmentManager, "edit") },
             onDelete = { product -> confirmDelete(product) }
         )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
-
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
         binding.fabAdd.setOnClickListener {
@@ -151,10 +154,7 @@ class InventoryFragment : Fragment() {
 
         viewModel.products.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> {
-                    binding.progressBar.show()
-                    binding.recyclerView.hide()
-                }
+                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
                 is Resource.Success -> {
                     binding.progressBar.hide()
                     binding.swipeRefresh.isRefreshing = false
@@ -162,21 +162,13 @@ class InventoryFragment : Fragment() {
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
-                is Resource.Error -> {
-                    binding.progressBar.hide()
-                    binding.swipeRefresh.isRefreshing = false
-                    toast(state.message)
-                }
+                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
             }
         }
 
         viewModel.deleteResult.observe(viewLifecycleOwner) { state ->
-            if (state is Resource.Success) {
-                toast("Product deleted")
-                viewModel.load()
-            } else if (state is Resource.Error) {
-                toast(state.message)
-            }
+            if (state is Resource.Success) { toast("Product deleted"); viewModel.load() }
+            else if (state is Resource.Error) toast(state.message)
         }
 
         viewModel.load()
@@ -191,13 +183,8 @@ class InventoryFragment : Fragment() {
             .show()
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
-    }
+    override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }
-
-// ─── FORM DIALOG ──────────────────────────────────────────────────────────────
 
 class ProductFormDialog(
     private val product: Product?,
@@ -215,7 +202,6 @@ class ProductFormDialog(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
         binding.tvTitle.text = if (product != null) "Edit Product" else "Add Product"
 
         product?.let {
@@ -230,7 +216,6 @@ class ProductFormDialog(
         }
 
         loadSuppliers()
-
         binding.btnSave.setOnClickListener { save() }
         binding.btnCancel.setOnClickListener { dismiss() }
     }
@@ -290,7 +275,6 @@ class ProductFormDialog(
             } else {
                 safeApiCall { RetrofitClient.instance.createProduct(request) }
             }
-
             binding.btnSave.isEnabled = true
 
             when (result) {
@@ -299,14 +283,89 @@ class ProductFormDialog(
                     onSuccess()
                     dismiss()
                 }
-                is Resource.Error -> toast(result.message)
+                is Resource.Error -> {
+                    // 🛠️ Catch the HTTP 202 intercept data validation string block from your backend
+                    if (result.message.contains("submitted for Admin review", ignoreCase = true) || result.message.contains("202")) {
+                        AlertDialog.Builder(requireContext())
+                            .setTitle("Staged for Review")
+                            .setMessage("Product changes submitted to the Admin Approvals Staging Queue.")
+                            .setPositiveButton("OK") { _, _ -> onSuccess(); dismiss() }
+                            .show()
+                    } else {
+                        toast(result.message)
+                    }
+                }
                 else -> {}
             }
         }
     }
+    class DispatchStockDialog(private val onSuccess: () -> Unit) : com.google.android.material.bottomsheet.BottomSheetDialogFragment() {
+        private var _binding: com.scms.app.databinding.DialogDispatchFormBinding? = null
+        private val binding get() = _binding!!
+        private var products = listOf<Product>()
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null
+        override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+            _binding = com.scms.app.databinding.DialogDispatchFormBinding.inflate(inflater, container, false)
+            return binding.root
+        }
+
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+
+            // Populate reasons spinner
+            val reasons = arrayOf("Customer Sale", "Internal Dispatch", "Damaged Stock")
+            binding.spinnerReason.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, reasons).also {
+                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+
+            loadProducts()
+            binding.btnSubmit.setOnClickListener { executeDeduction() }
+            binding.btnCancel.setOnClickListener { dismiss() }
+        }
+
+        private fun loadProducts() {
+            lifecycleScope.launch {
+                val result = safeApiCall { RetrofitClient.instance.getProducts() }
+                if (result is Resource.Success) {
+                    products = result.data.data
+                    val names = products.map { "${it.name} (Avail: ${it.stockQty})" }
+                    binding.spinnerProduct.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, names).also {
+                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                    }
+                }
+            }
+        }
+
+        private fun executeDeduction() {
+            if (products.isEmpty()) return
+            val product = products[binding.spinnerProduct.selectedItemPosition]
+            val qty = binding.etQty.text.toString().toIntOrNull() ?: 0
+            val reason = binding.spinnerReason.selectedItem.toString()
+
+            if (qty <= 0) { toast("Enter valid leaving quantity"); return }
+
+            lifecycleScope.launch {
+                binding.btnSubmit.isEnabled = false
+                val result = safeApiCall {
+                    RetrofitClient.instance.adjustStock(product.id, com.scms.app.models.StockAdjustRequest("remove", qty, reason))
+                }
+                binding.btnSubmit.isEnabled = true
+
+                // Check for both direct success and custom manager 202 review intercepts
+                if (result is Resource.Success) {
+                    toast("Warehouse inventory adjusted successfully")
+                    onSuccess(); dismiss()
+                } else if (result is Resource.Error) {
+                    if (result.message.contains("submitted for Admin review", ignoreCase = true) || result.message.contains("202")) {
+                        toast("Outbound log submitted to Admin Approvals Staging Queue!")
+                        onSuccess(); dismiss()
+                    } else {
+                        toast(result.message)
+                    }
+                }
+            }
+        }
+
+        override fun onDestroyView() { super.onDestroyView(); _binding = null }
     }
 }
