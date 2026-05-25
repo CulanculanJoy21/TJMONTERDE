@@ -60,9 +60,21 @@
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAdd" android:layout_width="wrap_content"
-        android:layout_height="wrap_content" android:layout_gravity="bottom|end"
-        android:layout_margin="16dp" android:src="@android:drawable/ic_input_add"
-        android:contentDescription="New Order" android:visibility="gone" />
+        android:id="@+id/fabAdd"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="96dp"
+        android:src="@android:drawable/ic_input_add"
+        android:contentDescription="New Order"
+        android:clickable="true"
+        android:focusable="true"
+        app:fabSize="normal"
+        app:elevation="8dp"
+        app:pressedTranslationZ="12dp"
+        app:backgroundTint="@color/primary"
+        app:tint="@color/white"
+        android:visibility="visible" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

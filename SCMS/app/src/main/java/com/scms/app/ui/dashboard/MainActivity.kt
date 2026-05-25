@@ -42,7 +42,6 @@ class MainActivity : AppCompatActivity() {
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
 
-        // 🛠️ FIXED: Added the missing comma right before the new approvals menu ID entry token
         appBarConfig = AppBarConfiguration(
             setOf(
                 R.id.nav_dashboard,
@@ -57,25 +56,39 @@ class MainActivity : AppCompatActivity() {
         setupActionBarWithNavController(navController, appBarConfig)
         binding.bottomNavView.setupWithNavController(navController)
 
-        // 🛠️ SECURITY VISIBILITY: Enforce role-based tab rendering directly on the BottomNav view structure
+        // 🔏 ROLE VISIBILITY SYSTEM ENFORCEMENT
         val role = session.user?.role?.lowercase() ?: "field_personnel"
+        val menu = binding.bottomNavView.menu
 
-        if (role != "admin") {
-            binding.bottomNavView.menu.findItem(R.id.nav_approvals)?.isVisible = false
+        if (role == "field_personnel") {
+            // 🚚 1. Strips out all management panels from the driver's interface
+            menu.findItem(R.id.nav_dashboard)?.isVisible = false
+            menu.findItem(R.id.nav_inventory)?.isVisible = false
+            menu.findItem(R.id.nav_orders)?.isVisible = false
+            menu.findItem(R.id.nav_suppliers)?.isVisible = false
+            menu.findItem(R.id.nav_approvals)?.isVisible = false
+
+            // 🎯 2. Programmatically force navigation context to land straight on Deliveries
+            navController.navigate(R.id.nav_deliveries)
+        } else {
+            // Standard management visibility gates for Admin and Managers
+            if (role != "admin") {
+                menu.findItem(R.id.nav_approvals)?.isVisible = false
+            }
+            if (!session.isAdminOrManager) {
+                menu.findItem(R.id.nav_suppliers)?.isVisible = false
+            }
         }
 
-        // Hide suppliers for field personnel / drivers
-        if (!session.isAdminOrManager) {
-            binding.bottomNavView.menu.findItem(R.id.nav_suppliers)?.isVisible = false
+        // Only kick off badge notification checking if they can actually see the dashboard layout badge
+        if (role != "field_personnel") {
+            startNotificationPolling()
         }
-
-        startNotificationPolling()
     }
 
     private fun startNotificationPolling() {
         lifecycleScope.launch {
             while (isActive) {
-                // Terminate background threads instantly if logging out or cleared
                 if (!session.isLoggedIn) {
                     break
                 }
@@ -88,15 +101,18 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (_: Exception) {}
 
-                delay(30_000) // Poll safely every 30 seconds
+                delay(30_000)
             }
         }
     }
 
     fun updateNotificationBadge(count: Int) {
-        val badge = binding.bottomNavView.getOrCreateBadge(R.id.nav_dashboard)
-        badge.isVisible = count > 0
-        if (count > 0) badge.number = count
+        // Safe check ensures we don't fetch or crash on a hidden layout view element
+        if (session.user?.role?.lowercase() != "field_personnel") {
+            val badge = binding.bottomNavView.getOrCreateBadge(R.id.nav_dashboard)
+            badge.isVisible = count > 0
+            if (count > 0) badge.number = count
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean =

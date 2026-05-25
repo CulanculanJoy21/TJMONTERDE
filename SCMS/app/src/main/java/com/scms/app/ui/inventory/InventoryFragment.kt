@@ -59,7 +59,7 @@ class InventoryViewModel : ViewModel() {
 
 class ProductAdapter(
     private var items: List<Product>,
-    private val userRole: String?, // 🛠️ Track logged session scope bounds
+    private val userRole: String?,
     private val onEdit: (Product) -> Unit,
     private val onDelete: (Product) -> Unit
 ) : RecyclerView.Adapter<ProductAdapter.VH>() {
@@ -91,13 +91,18 @@ class ProductAdapter(
                 tvStock.setTextColor(root.context.getColor(android.R.color.holo_green_dark))
             }
 
-            // 🛠️ Restrict mutation controls directly matching dashboard layouts
+            // 🔏 ROLE SYSTEM ENFORCEMENT: Only Admins can modify live catalog entries directly
             val role = userRole?.lowercase() ?: "field_personnel"
             if (role == "admin") {
                 btnEdit.show()
                 btnDelete.show()
                 btnEdit.setOnClickListener { onEdit(p) }
                 btnDelete.setOnClickListener { onDelete(p) }
+            } else if (role == "manager") {
+                // Managers can click Edit to request modifications, but Delete is completely hidden
+                btnEdit.show()
+                btnDelete.hide()
+                btnEdit.setOnClickListener { onEdit(p) }
             } else {
                 btnEdit.hide()
                 btnDelete.hide()
@@ -127,10 +132,11 @@ class InventoryFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val session = SessionManager(requireContext())
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
 
         adapter = ProductAdapter(
             emptyList(),
-            userRole = session.user?.role, // 🛠️ Pass role downstream
+            userRole = role,
             onEdit   = { product -> ProductFormDialog(product) { viewModel.load() }.show(childFragmentManager, "edit") },
             onDelete = { product -> confirmDelete(product) }
         )
@@ -139,8 +145,33 @@ class InventoryFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
-        binding.fabAdd.setOnClickListener {
-            ProductFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add")
+        // 🛠️ SHARED ACCESS ENFORCEMENT: Admins and Managers get creation FABs
+        // 🛠️ FIXED: Clear, separate action routing for Admins and Managers
+        when (role) {
+            "admin", "manager" -> {
+                binding.fabAdd.show()
+                binding.fabAdd.setImageResource(android.R.drawable.ic_input_add)
+                binding.fabAdd.setOnClickListener {
+                    // Both roles see the clean menu options interface block
+                    val options = arrayOf("Request/Add Product Profile", "Dispatch Outbound Stock")
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Inventory Operations")
+                        .setItems(options) { _, which ->
+                            if (which == 0) {
+                                // Admin adds live directly; Manager triggers the 202 Staging Intercept built below
+                                ProductFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add")
+                            } else {
+                                // Both roles can now drop right into the dispatching deduction workflow view
+                                ProductFormDialog.DispatchStockDialog { viewModel.load() }.show(childFragmentManager, "dispatch")
+                            }
+                        }
+                        .show()
+                }
+            }
+            else -> {
+                // Keep the UI completely clean for Drivers / Field Personnel
+                binding.fabAdd.hide()
+            }
         }
 
         binding.etSearch.addTextChangedListener(object : TextWatcher {
@@ -279,17 +310,20 @@ class ProductFormDialog(
 
             when (result) {
                 is Resource.Success -> {
-                    toast(if (product != null) "Product updated" else "Product added")
+                    toast(if (product != null) "Product profile updated live!" else "Product added live!")
                     onSuccess()
                     dismiss()
                 }
                 is Resource.Error -> {
-                    // 🛠️ Catch the HTTP 202 intercept data validation string block from your backend
-                    if (result.message.contains("submitted for Admin review", ignoreCase = true) || result.message.contains("202")) {
+                    // 🔏 INTERCEPT: Catches manager submissions or edits and alerts them of staging statuses cleanly
+                    if (result.message.contains("submitted for Admin review", ignoreCase = true) ||
+                        result.message.contains("202") ||
+                        result.message.contains("review", ignoreCase = true)) {
+
                         AlertDialog.Builder(requireContext())
-                            .setTitle("Staged for Review")
-                            .setMessage("Product changes submitted to the Admin Approvals Staging Queue.")
-                            .setPositiveButton("OK") { _, _ -> onSuccess(); dismiss() }
+                            .setTitle("Changes Submitted")
+                            .setMessage("This item profile has been routed to the Admin Approvals Queue. It will appear live once authorized.")
+                            .setPositiveButton("Understood") { _, _ -> onSuccess(); dismiss() }
                             .show()
                     } else {
                         toast(result.message)
@@ -299,7 +333,8 @@ class ProductFormDialog(
             }
         }
     }
-    class DispatchStockDialog(private val onSuccess: () -> Unit) : com.google.android.material.bottomsheet.BottomSheetDialogFragment() {
+
+    class DispatchStockDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFragment() {
         private var _binding: com.scms.app.databinding.DialogDispatchFormBinding? = null
         private val binding get() = _binding!!
         private var products = listOf<Product>()
@@ -312,7 +347,6 @@ class ProductFormDialog(
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
             super.onViewCreated(view, savedInstanceState)
 
-            // Populate reasons spinner
             val reasons = arrayOf("Customer Sale", "Internal Dispatch", "Damaged Stock")
             binding.spinnerReason.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, reasons).also {
                 it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -351,7 +385,6 @@ class ProductFormDialog(
                 }
                 binding.btnSubmit.isEnabled = true
 
-                // Check for both direct success and custom manager 202 review intercepts
                 if (result is Resource.Success) {
                     toast("Warehouse inventory adjusted successfully")
                     onSuccess(); dismiss()

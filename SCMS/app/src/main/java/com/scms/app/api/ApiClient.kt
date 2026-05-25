@@ -154,6 +154,9 @@ object RetrofitClient {
             token?.let { addHeader("Authorization", "Bearer $it") }
             addHeader("Accept", "application/json")
             addHeader("Content-Type", "application/json")
+
+            // 🛠️ FIXED: Tells Laravel this request is coming from the mobile client
+            addHeader("X-Client-Platform", "android")
         }.build()
         chain.proceed(request)
     }

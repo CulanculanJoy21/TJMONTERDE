@@ -47,6 +47,7 @@
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="2dp" />
+
         <TextView
             android:id="@+id/tvProduct"
             android:layout_width="wrap_content"
@@ -55,6 +56,29 @@
             android:textStyle="bold"
             android:textColor="@color/text_primary"
             android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:id="@+id/layoutPickupGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/tvSupplierName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="@color/primary" />
+            <TextView
+                android:id="@+id/tvSupplierAddress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"

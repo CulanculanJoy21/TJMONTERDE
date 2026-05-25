@@ -38,7 +38,10 @@
 
         <ProgressBar android:id="@+id/progressBar" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:visibility="gone" />
 
-        <TextView android:id="@+id/tvEmpty" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="No products found" android:textColor="@color/text_secondary" android:layout_gravity="center" android:visibility="gone" android:layout_marginTop="32dp" />
+        <TextView android:id="@+id/tvEmpty" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="No products found"
+            android:textColor="@color/text_secondary" android:layout_gravity="center"
+            android:visibility="gone" android:layout_marginTop="32dp" />
 
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swipeRefresh"
@@ -58,8 +61,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="96dp"
         android:src="@android:drawable/ic_input_add"
-        android:contentDescription="Add" />
+        android:contentDescription="Add"
+        android:clickable="true"
+        android:focusable="true"
+        app:fabSize="normal"
+        app:elevation="8dp"
+        app:backgroundTint="@color/primary"
+        app:tint="@color/white"
+        android:visibility="invisible" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

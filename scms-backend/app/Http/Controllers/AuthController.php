@@ -37,10 +37,20 @@ class AuthController extends Controller
         }
 
         // 3. 🛡️ ROLE GATEKEEPER
-        if (! in_array($user->role, ['admin', 'manager'])) {
+        $clientPlatform = $request->header('X-Client-Platform');
+
+        if ($user->role === 'field_personnel') {
+            // 🚚 Drivers are strictly forbidden from logging into the Web Dashboard
+            if ($clientPlatform !== 'android') {
+                return response()->json([
+                    'message' => 'Unauthorized: Driver accounts can only log in via the mobile application.'
+                ], 403);
+            }
+        } elseif (!in_array($user->role, ['admin', 'manager'])) {
+            // Block any other roles that aren't admin or manager
             return response()->json([
-                'message' => 'Unauthorized: Only management accounts can log in here.'
-            ], 403); // Forbidden
+                'message' => 'Unauthorized: Access denied.'
+            ], 403);
         }
 
         // Revoke previous tokens for a clean session

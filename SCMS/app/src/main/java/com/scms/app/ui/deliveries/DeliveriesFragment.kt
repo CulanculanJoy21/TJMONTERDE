@@ -24,7 +24,7 @@ import androidx.lifecycle.MutableLiveData
 class DeliveriesViewModel : ViewModel() {
     val deliveries = MutableLiveData<Resource<List<Delivery>>>()
     val updateResult = MutableLiveData<Resource<Unit>>()
-    val deleteResult = MutableLiveData<Resource<Unit>>() // 🛠️ Tracks removal completions
+    val deleteResult = MutableLiveData<Resource<Unit>>()
 
     fun load(status: String? = null) {
         viewModelScope.launch {
@@ -51,7 +51,6 @@ class DeliveriesViewModel : ViewModel() {
         }
     }
 
-    // 🛠️ Dispatches permanent deletion downstream to the backend API route
     fun deleteDelivery(id: Int) {
         viewModelScope.launch {
             val result = safeApiCall { RetrofitClient.instance.deleteDelivery(id) }
@@ -68,9 +67,9 @@ class DeliveriesViewModel : ViewModel() {
 
 class DeliveryAdapter(
     private var items: List<Delivery>,
-    private val userRole: String?, // 🛠️ Explicit access rule context tracking
-    private val onUpdateStatus: (Delivery) -> Unit,
-    private val onDeleteDelivery: (Delivery) -> Unit // 🛠️ Triggers deletion logic dialogs
+    private val userRole: String?,
+    private val onUpdateStatus: (Int, String) -> Unit,
+    private val onDeleteDelivery: (Delivery) -> Unit
 ) : RecyclerView.Adapter<DeliveryAdapter.VH>() {
 
     inner class VH(val binding: ItemDeliveryBinding) : RecyclerView.ViewHolder(binding.root)
@@ -87,17 +86,28 @@ class DeliveryAdapter(
             tvOrderId.text     = "Order ID: #${d.order?.id ?: "—"}"
             tvProduct.text     = d.order?.product?.name ?: "—"
             tvDriver.text      = d.driver?.name ?: "Unassigned"
-            tvDestination.text = d.destination
+            tvDestination.text = "Deliver To: ${d.destination}"
+
+            // 🚚 FIXED: Map Supplier Pickup Information cleanly onto the card UI fields
+            val supplierObj = d.order?.supplier
+            if (supplierObj != null) {
+                tvSupplierName.text = "Pickup From: ${supplierObj.name}"
+                tvSupplierAddress.text = supplierObj.address ?: "Address not listed"
+                layoutPickupGroup.show()
+            } else {
+                layoutPickupGroup.hide()
+            }
+
             val rawEta = d.eta
             if (!rawEta.isNullOrEmpty() && rawEta.contains("T")) {
                 try {
                     val parts = rawEta.split("T")
-                    val dateParts = parts[0].split("-") // [2026, 05, 19]
-                    val timeParts = parts[1].split(":") // [16, 00, 00...]
+                    val dateParts = parts[0].split("-")
+                    val timeParts = parts[1].split(":")
 
-                    val year = dateParts[0].substring(2) // "26"
-                    val month = dateParts[1].toInt().toString() // "5"
-                    val day = dateParts[2].toInt().toString() // "19"
+                    val year = dateParts[0].substring(2)
+                    val month = dateParts[1].toInt().toString()
+                    val day = dateParts[2].toInt().toString()
 
                     var hour = timeParts[0].toInt()
                     val ampm = if (hour >= 12) "PM" else "AM"
@@ -106,7 +116,7 @@ class DeliveryAdapter(
 
                     tvEta.text = "ETA: $month/$day/$year, $hour:00 $ampm"
                 } catch (e: Exception) {
-                    tvEta.text = "ETA: $rawEta" // Fallback if parsing fails
+                    tvEta.text = "ETA: $rawEta"
                 }
             } else {
                 tvEta.text = "ETA: —"
@@ -121,30 +131,32 @@ class DeliveryAdapter(
             progress3.isActivated = stepIdx >= 2
             progress4.isActivated = stepIdx >= 3
 
-            // Control tracking modification capabilities based on current completion state
+            val role = userRole?.lowercase() ?: "field_personnel"
+
             if (d.status != "delivered" && d.status != "cancelled") {
                 btnUpdateStatus.show()
-                btnUpdateStatus.setOnClickListener { onUpdateStatus(d) }
+                btnUpdateStatus.setOnClickListener { onUpdateStatus(d.id, "prompt") }
 
-                // 🛠️ INLINE CANCELLATION: Pressing and holding the Delivery ID label acts as a shortcut cancel route
                 tvDeliveryId.setOnLongClickListener {
-                    AlertDialog.Builder(root.context)
-                        .setTitle("Cancel Delivery Operations")
-                        .setMessage("Permanently remove delivery tracking trace record TRK-${d.id} from local logs?")
-                        .setPositiveButton("Cancel Delivery") { _, _ ->
-                            onUpdateStatus(d.copy(status = "cancelled"))
-                        }
-                        .setNegativeButton("Keep Active", null)
-                        .show()
+                    if (role == "admin" || role == "manager") {
+                        AlertDialog.Builder(root.context)
+                            .setTitle("Cancel Delivery Operations")
+                            .setMessage("Are you sure you want to mark tracker entry TRK-${d.id} as Cancelled?")
+                            .setPositiveButton("Cancel Delivery") { _, _ ->
+                                onUpdateStatus(d.id, "cancelled")
+                            }
+                            .setNegativeButton("Keep Active", null)
+                            .show()
+                    } else {
+                        root.context.toast("Access Denied: Only dispatch managers can cancel active delivery trails.")
+                    }
                     true
                 }
             } else {
                 btnUpdateStatus.hide()
-                tvDeliveryId.setOnLongClickListener(null) // Strip long click listeners for resolved cards
+                tvDeliveryId.setOnLongClickListener(null)
             }
 
-            // 🛠️ CONDITIONAL PRIVILEGE FILTERING: Reveal the layout's trash bin shortcut only to admins
-            val role = userRole?.lowercase() ?: "field_personnel"
             if (role == "admin" && (d.status == "delivered" || d.status == "cancelled")) {
                 btnDeleteDelivery.show()
                 btnDeleteDelivery.setOnClickListener { onDeleteDelivery(d) }
@@ -183,15 +195,13 @@ class DeliveriesFragment : Fragment() {
         adapter = DeliveryAdapter(
             emptyList(),
             userRole = session.user?.role,
-            onUpdateStatus = { delivery ->
-                // Checks if this invocation was fired from our custom inline cancellation trigger shortcut
-                if (delivery.status == "cancelled") {
-                    viewModel.updateStatus(delivery.id, "cancelled")
+            onUpdateStatus = { id, action ->
+                if (action == "cancelled") {
+                    viewModel.updateStatus(id, "cancelled")
                 } else {
-                    showStatusPicker(delivery)
+                    showStatusPicker(id)
                 }
             },
-            // 🛠️ FIXED: Standardized the confirmation dialog alert message to match your TRK nomenclature system
             onDeleteDelivery = { delivery ->
                 AlertDialog.Builder(requireContext())
                     .setTitle("Remove Tracking Record")
@@ -231,7 +241,6 @@ class DeliveriesFragment : Fragment() {
             else if (state is Resource.Error) toast(state.message)
         }
 
-        // 🛠️ Observe database clearance operations and sync UI automatically
         viewModel.deleteResult.observe(viewLifecycleOwner) { state ->
             if (state is Resource.Success) { toast("Tracking record removed"); viewModel.load(currentFilter) }
             else if (state is Resource.Error) toast(state.message)
@@ -240,13 +249,13 @@ class DeliveriesFragment : Fragment() {
         viewModel.load()
     }
 
-    private fun showStatusPicker(delivery: Delivery) {
+    private fun showStatusPicker(deliveryId: Int) {
         val statuses = arrayOf("Pending", "In Transit", "Out for Delivery", "Delivered")
         val values   = arrayOf("pending", "in_transit", "out_for_delivery", "delivered")
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Update Delivery Status")
-            .setItems(statuses) { _, which -> viewModel.updateStatus(delivery.id, values[which]) }
+            .setItems(statuses) { _, which -> viewModel.updateStatus(deliveryId, values[which]) }
             .setNegativeButton("Cancel", null)
             .show()
     }

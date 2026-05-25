@@ -1,7 +1,10 @@
 package com.scms.app.ui.orders
 
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.*
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
@@ -57,7 +60,7 @@ class OrdersViewModel : ViewModel() {
 
 class OrderAdapter(
     private var items: List<Order>,
-    private val isManager: Boolean,
+    private val userRole: String?,
     private val onApprove: (Order) -> Unit,
     private val onReject: (Order) -> Unit
 ) : RecyclerView.Adapter<OrderAdapter.VH>() {
@@ -79,11 +82,11 @@ class OrderAdapter(
             tvTotal.text      = formatCurrency(o.totalAmount)
             tvDate.text       = o.createdAt.take(10)
             tvStatus.text     = statusLabel(o.status)
-            tvStatus.setBackgroundColor(
-                root.context.getColor(statusColor(o.status))
-            )
+            tvStatus.setBackgroundColor(root.context.getColor(statusColor(o.status)))
 
-            if (isManager && o.status == "pending") {
+            // 🔏 ROLE ENFORCEMENT: Only Admin accounts can reveal approval controls
+            val role = userRole?.lowercase() ?: "field_personnel"
+            if (role == "admin" && o.status == "pending") {
                 btnApprove.show()
                 btnReject.show()
                 btnApprove.setOnClickListener { onApprove(o) }
@@ -120,10 +123,11 @@ class OrdersFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val session = SessionManager(requireContext())
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
 
         adapter = OrderAdapter(
             emptyList(),
-            isManager = session.isAdminOrManager,
+            userRole = role,
             onApprove = { order -> confirmAction(order, "approved") },
             onReject  = { order -> confirmAction(order, "rejected") }
         )
@@ -133,6 +137,7 @@ class OrdersFragment : Fragment() {
 
         binding.swipeRefresh.setOnRefreshListener { viewModel.load(currentFilter) }
 
+        // Filter chips bindings
         binding.chipAll.setOnClickListener      { currentFilter = null;        viewModel.load(null) }
         binding.chipPending.setOnClickListener  { currentFilter = "pending";   viewModel.load("pending") }
         binding.chipApproved.setOnClickListener { currentFilter = "approved";  viewModel.load("approved") }
@@ -140,13 +145,11 @@ class OrdersFragment : Fragment() {
         binding.chipDelivered.setOnClickListener{ currentFilter = "delivered"; viewModel.load("delivered") }
         binding.chipRejected.setOnClickListener { currentFilter = "rejected";  viewModel.load("rejected") }
 
-        if (session.isAdminOrManager) {
-            binding.fabAdd.show()
-            binding.fabAdd.setOnClickListener {
-                OrderFormDialog { viewModel.load(currentFilter) }.show(childFragmentManager, "add_order")
-            }
-        } else {
-            binding.fabAdd.hide()
+        // Contextual FAB visibility check
+        // 🛠️ FORCED VISIBILITY: Showing the button unconditionally for testing
+        binding.fabAdd.show()
+        binding.fabAdd.setOnClickListener {
+            OrderFormDialog { viewModel.load(currentFilter) }.show(childFragmentManager, "add_order")
         }
 
         viewModel.orders.observe(viewLifecycleOwner) { state ->
@@ -168,7 +171,7 @@ class OrdersFragment : Fragment() {
         }
 
         viewModel.actionResult.observe(viewLifecycleOwner) { state ->
-            if (state is Resource.Success) { toast("Order updated"); viewModel.load(currentFilter) }
+            if (state is Resource.Success) { toast("Order status updated"); viewModel.load(currentFilter) }
             else if (state is Resource.Error) toast(state.message)
         }
 
@@ -206,6 +209,7 @@ class OrderFormDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFrag
         super.onViewCreated(view, savedInstanceState)
 
         loadData()
+        setupTextCalculationListeners()
         binding.btnSave.setOnClickListener { save() }
         binding.btnCancel.setOnClickListener { dismiss() }
     }
@@ -220,6 +224,16 @@ class OrderFormDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFrag
                 val names = products.map { it.name }
                 binding.spinnerProduct.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, names)
                     .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+                binding.spinnerProduct.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                        if (products.isNotEmpty()) {
+                            binding.etUnitPrice.setText(products[position].unitPrice.toString())
+                            calculateLiveTotal()
+                        }
+                    }
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
+                }
             }
 
             if (sResult is Resource.Success) {
@@ -229,6 +243,22 @@ class OrderFormDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFrag
                     .also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
             }
         }
+    }
+
+    private fun setupTextCalculationListeners() {
+        val watcher = object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) { calculateLiveTotal() }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        }
+        binding.etQty.addTextChangedListener(watcher)
+        binding.etUnitPrice.addTextChangedListener(watcher)
+    }
+
+    private fun calculateLiveTotal() {
+        val qty = binding.etQty.text.toString().toIntOrNull() ?: 0
+        val price = binding.etUnitPrice.text.toString().toDoubleOrNull() ?: 0.0
+        binding.tvTotal.text = formatCurrency(qty * price)
     }
 
     private fun save() {
@@ -252,9 +282,23 @@ class OrderFormDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFrag
             binding.btnSave.isEnabled = false
             val result = safeApiCall { RetrofitClient.instance.createOrder(request) }
             binding.btnSave.isEnabled = true
+
             when (result) {
-                is Resource.Success -> { toast("Order created"); onSuccess(); dismiss() }
-                is Resource.Error   -> toast(result.message)
+                is Resource.Success -> {
+                    toast("Order created successfully!")
+                    onSuccess(); dismiss()
+                }
+                is Resource.Error   -> {
+                    if (result.message.contains("202") || result.message.contains("review", ignoreCase = true)) {
+                        AlertDialog.Builder(requireContext())
+                            .setTitle("Order Submitted")
+                            .setMessage("Your purchase request has been safely sent to the Admin Approvals Staging Queue.")
+                            .setPositiveButton("OK") { _, _ -> onSuccess(); dismiss() }
+                            .show()
+                    } else {
+                        toast(result.message)
+                    }
+                }
                 else -> {}
             }
         }

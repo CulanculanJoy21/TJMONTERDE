@@ -1,9 +1,10 @@
 package com.scms.app.ui.suppliers
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.*
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -23,14 +24,16 @@ import com.scms.app.models.SupplierRequest
 import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 
+// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
+
 class SuppliersViewModel : ViewModel() {
     val suppliers = MutableLiveData<Resource<List<Supplier>>>()
-    val deleteResult = MutableLiveData<Resource<Unit>>()
+    val actionResult = MutableLiveData<Resource<Unit>>()
 
-    fun load(search: String? = null) {
+    fun load() {
         viewModelScope.launch {
             suppliers.value = Resource.Loading()
-            val result = safeApiCall { RetrofitClient.instance.getSuppliers(search = search) }
+            val result = safeApiCall { RetrofitClient.instance.getSuppliers() }
             when (result) {
                 is Resource.Success -> suppliers.value = Resource.Success(result.data.data)
                 is Resource.Error   -> suppliers.value = Resource.Error(result.message)
@@ -42,7 +45,7 @@ class SuppliersViewModel : ViewModel() {
     fun delete(id: Int) {
         viewModelScope.launch {
             val result = safeApiCall { RetrofitClient.instance.deleteSupplier(id) }
-            deleteResult.value = when (result) {
+            actionResult.value = when (result) {
                 is Resource.Success -> Resource.Success(Unit)
                 is Resource.Error   -> Resource.Error(result.message)
                 is Resource.Loading -> Resource.Loading()
@@ -51,12 +54,17 @@ class SuppliersViewModel : ViewModel() {
     }
 }
 
+// ─── ADAPTER ─────────────────────────────────────────────────────────────────
+
 class SupplierAdapter(
     private var items: List<Supplier>,
-    private val userRole: String?, // 🛠️ Access scope tracking prop injection
+    private val isAdmin: Boolean,
     private val onEdit: (Supplier) -> Unit,
     private val onDelete: (Supplier) -> Unit
 ) : RecyclerView.Adapter<SupplierAdapter.VH>() {
+
+    // 🛠️ ADD THIS: Keeps a master backup copy of your supplier directory data
+    private var unfilteredItems: List<Supplier> = items
 
     inner class VH(val binding: ItemSupplierBinding) : RecyclerView.ViewHolder(binding.root)
 
@@ -68,19 +76,26 @@ class SupplierAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val s = items[position]
         holder.binding.apply {
-            tvName.text         = s.name
-            tvCountry.text      = s.country ?: "—"
-            tvEmail.text        = s.email
-            tvPhone.text        = s.phone ?: "—"
-            tvActiveOrders.text = "${s.activeOrders ?: 0} active orders"
-            tvRating.text       = "★ ${s.rating}"
+            tvName.text = s.name
+            tvCountry.text = s.country ?: "Local Vendor"
+            tvEmail.text = "Email: ${s.email ?: "—"}"
+            tvPhone.text = "Phone: ${s.phone ?: "—"}"
+            tvActiveOrders.text = "Manual Fulfillment Mode"
+            tvRating.text = "★ ${s.rating ?: "0.0"}"
 
-            // 🛠️ Restrict partner information mutations to Admins
-            val role = userRole?.lowercase() ?: "field_personnel"
-            if (role == "admin") {
+            root.setOnClickListener {
+                if (!s.phone.isNullOrBlank()) {
+                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${s.phone}"))
+                    root.context.startActivity(intent)
+                } else {
+                    Toast.makeText(root.context, "No phone details listed for this vendor", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            if (isAdmin) {
                 btnEdit.show()
                 btnDelete.show()
-                btnEdit.setOnClickListener   { onEdit(s) }
+                btnEdit.setOnClickListener { onEdit(s) }
                 btnDelete.setOnClickListener { onDelete(s) }
             } else {
                 btnEdit.hide()
@@ -89,11 +104,29 @@ class SupplierAdapter(
         }
     }
 
+    // 🛠️ UPDATED: Updates both lists when new network response calls drop in
     fun update(newItems: List<Supplier>) {
         items = newItems
+        unfilteredItems = newItems
+        notifyDataSetChanged()
+    }
+
+    // 🛠️ ADD THIS FUNCTION: Local character loop logic for real-time string sorting
+    fun filter(query: String) {
+        val cleanQuery = query.lowercase().trim()
+        items = if (cleanQuery.isEmpty()) {
+            unfilteredItems
+        } else {
+            unfilteredItems.filter { supplier ->
+                supplier.name.lowercase().contains(cleanQuery) ||
+                        (supplier.country?.lowercase()?.contains(cleanQuery) ?: false)
+            }
+        }
         notifyDataSetChanged()
     }
 }
+
+// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class SuppliersFragment : Fragment() {
 
@@ -111,11 +144,13 @@ class SuppliersFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val session = SessionManager(requireContext())
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
+        val isAdminUser = role == "admin"
 
         adapter = SupplierAdapter(
             emptyList(),
-            userRole = session.user?.role, // 🛠️ Pass active role string downstream
-            onEdit   = { supplier -> SupplierFormDialog(supplier) { viewModel.load() }.show(childFragmentManager, "edit_supplier") },
+            isAdmin = isAdminUser,
+            onEdit  = { supplier -> SupplierFormDialog(supplier) { viewModel.load() }.show(childFragmentManager, "edit_supplier") },
             onDelete = { supplier -> confirmDelete(supplier) }
         )
 
@@ -123,15 +158,23 @@ class SuppliersFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
-        binding.fabAdd.setOnClickListener {
-            SupplierFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add_supplier")
-        }
-
-        binding.etSearch.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) { viewModel.load(search = s?.toString()) }
+        // 🛠️ FIXED: Real-time text watcher listener hooked up to filter layout datasets on-the-fly
+        binding.etSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                adapter.filter(s?.toString() ?: "")
+            }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
+
+        if (isAdminUser) {
+            binding.fabAdd.show()
+            binding.fabAdd.setOnClickListener {
+                SupplierFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add_supplier")
+            }
+        } else {
+            binding.fabAdd.hide()
+        }
 
         viewModel.suppliers.observe(viewLifecycleOwner) { state ->
             when (state) {
@@ -147,8 +190,8 @@ class SuppliersFragment : Fragment() {
             }
         }
 
-        viewModel.deleteResult.observe(viewLifecycleOwner) { state ->
-            if (state is Resource.Success) { toast("Supplier removed"); viewModel.load() }
+        viewModel.actionResult.observe(viewLifecycleOwner) { state ->
+            if (state is Resource.Success) { toast("Supplier data synced"); viewModel.load() }
             else if (state is Resource.Error) toast(state.message)
         }
 
@@ -158,7 +201,7 @@ class SuppliersFragment : Fragment() {
     private fun confirmDelete(supplier: Supplier) {
         AlertDialog.Builder(requireContext())
             .setTitle("Remove Supplier")
-            .setMessage("Remove \"${supplier.name}\" from the system?")
+            .setMessage("Are you sure you want to remove \"${supplier.name}\" from the directory?")
             .setPositiveButton("Remove") { _, _ -> viewModel.delete(supplier.id) }
             .setNegativeButton("Cancel", null)
             .show()
@@ -166,6 +209,8 @@ class SuppliersFragment : Fragment() {
 
     override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }
+
+// ─── FORM DIALOG ──────────────────────────────────────────────────────────────
 
 class SupplierFormDialog(
     private val supplier: Supplier?,
@@ -182,13 +227,13 @@ class SupplierFormDialog(
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.tvTitle.text = if (supplier != null) "Edit Supplier" else "Add Supplier"
+        binding.tvTitle.text = if (supplier != null) "Edit Supplier Info" else "Register New Supplier"
 
         supplier?.let {
             binding.etName.setText(it.name)
-            binding.etEmail.setText(it.email)
-            binding.etPhone.setText(it.phone ?: "")
             binding.etCountry.setText(it.country ?: "")
+            binding.etPhone.setText(it.phone ?: "")
+            binding.etEmail.setText(it.email ?: "")
             binding.etAddress.setText(it.address ?: "")
         }
 
@@ -198,21 +243,19 @@ class SupplierFormDialog(
 
     private fun save() {
         val name    = binding.etName.text.toString().trim()
-        val email   = binding.etEmail.text.toString().trim()
-        val phone   = binding.etPhone.text.toString().trim()
         val country = binding.etCountry.text.toString().trim()
+        val phone   = binding.etPhone.text.toString().trim()
+        val email   = binding.etEmail.text.toString().trim()
         val address = binding.etAddress.text.toString().trim()
 
-        if (name.isEmpty() || email.isEmpty()) {
-            toast("Name and email are required")
-            return
-        }
+        if (name.isEmpty()) { toast("Supplier Name is required"); return }
 
+        // 🛠️ FIXED: Only email requires a strict non-null fallback string
         val request = SupplierRequest(
-            name    = name,
-            email   = email,
-            phone   = phone.ifEmpty { null },
-            country = country.ifEmpty { null },
+            name = name,
+            country = if (country.isEmpty()) "Local" else country,
+            phone = phone.ifEmpty { null },
+            email = email.ifEmpty { "" }, // 💎 Passes empty string instead of null to prevent the mismatch error!
             address = address.ifEmpty { null }
         )
 
@@ -224,21 +267,12 @@ class SupplierFormDialog(
                 safeApiCall { RetrofitClient.instance.createSupplier(request) }
             }
             binding.btnSave.isEnabled = true
-            when (result) {
-                is Resource.Success -> { toast(if (supplier != null) "Supplier updated" else "Supplier added"); onSuccess(); dismiss() }
-                is Resource.Error -> {
-                    // 🛠️ Intercept HTTP 202 validation strings smoothly for pending manager creations
-                    if (result.message.contains("submitted for Admin review", ignoreCase = true) || result.message.contains("202")) {
-                        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                            .setTitle("Review Pending")
-                            .setMessage("Supplier details submitted to the Admin Approvals Staging Queue.")
-                            .setPositiveButton("OK") { _, _ -> onSuccess(); dismiss() }
-                            .show()
-                    } else {
-                        toast(result.message)
-                    }
-                }
-                else -> {}
+
+            if (result is Resource.Success) {
+                toast("Supplier catalog synchronized")
+                onSuccess(); dismiss()
+            } else if (result is Resource.Error) {
+                toast(result.message)
             }
         }
     }
