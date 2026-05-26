@@ -1,0 +1,12 @@
+Steps
+1. Open Xampp and Enable Apache and MySQL
+2. Open Visual Studio Code
+3. Open 2 Terminal CTRL + `(or the one above the tab button)
+4. for the first terminal cd into your backend
+
+cd scms-backend
+php artisan serve --host=0.0.0.0 --port=8000
+5. for your second terminal cd into your dashbord
+cd scms-dashboard (npm run dev)
+
+6. Open your browser then search localhost:3000

@@ -63,7 +63,6 @@ class SupplierAdapter(
     private val onDelete: (Supplier) -> Unit
 ) : RecyclerView.Adapter<SupplierAdapter.VH>() {
 
-    // 🛠️ ADD THIS: Keeps a master backup copy of your supplier directory data
     private var unfilteredItems: List<Supplier> = items
 
     inner class VH(val binding: ItemSupplierBinding) : RecyclerView.ViewHolder(binding.root)
@@ -81,7 +80,7 @@ class SupplierAdapter(
             tvEmail.text = "Email: ${s.email ?: "—"}"
             tvPhone.text = "Phone: ${s.phone ?: "—"}"
             tvActiveOrders.text = "Manual Fulfillment Mode"
-            tvRating.text = "★ ${s.rating ?: "0.0"}"
+            tvRating.text = "★ ${s.rating}"
 
             root.setOnClickListener {
                 if (!s.phone.isNullOrBlank()) {
@@ -92,26 +91,25 @@ class SupplierAdapter(
                 }
             }
 
+            // 🛠️ FIXED: Native visibility constraints clear layout rendering blocks
             if (isAdmin) {
-                btnEdit.show()
-                btnDelete.show()
+                btnEdit.visibility = View.VISIBLE
+                btnDelete.visibility = View.VISIBLE
                 btnEdit.setOnClickListener { onEdit(s) }
                 btnDelete.setOnClickListener { onDelete(s) }
             } else {
-                btnEdit.hide()
-                btnDelete.hide()
+                btnEdit.visibility = View.GONE
+                btnDelete.visibility = View.GONE
             }
         }
     }
 
-    // 🛠️ UPDATED: Updates both lists when new network response calls drop in
     fun update(newItems: List<Supplier>) {
         items = newItems
         unfilteredItems = newItems
         notifyDataSetChanged()
     }
 
-    // 🛠️ ADD THIS FUNCTION: Local character loop logic for real-time string sorting
     fun filter(query: String) {
         val cleanQuery = query.lowercase().trim()
         items = if (cleanQuery.isEmpty()) {
@@ -158,7 +156,6 @@ class SuppliersFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
-        // 🛠️ FIXED: Real-time text watcher listener hooked up to filter layout datasets on-the-fly
         binding.etSearch.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
                 adapter.filter(s?.toString() ?: "")
@@ -168,25 +165,32 @@ class SuppliersFragment : Fragment() {
         })
 
         if (isAdminUser) {
-            binding.fabAdd.show()
+            binding.fabAdd.visibility = View.VISIBLE
             binding.fabAdd.setOnClickListener {
                 SupplierFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add_supplier")
             }
         } else {
-            binding.fabAdd.hide()
+            binding.fabAdd.visibility = View.INVISIBLE
         }
 
         viewModel.suppliers.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
-                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
+                is Resource.Error -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
+                    toast(state.message)
+                }
             }
         }
 
@@ -201,7 +205,7 @@ class SuppliersFragment : Fragment() {
     private fun confirmDelete(supplier: Supplier) {
         AlertDialog.Builder(requireContext())
             .setTitle("Remove Supplier")
-            .setMessage("Are you sure you want to remove \"${supplier.name}\" from the directory?")
+            .setMessage("Are you sure you want to remove \"\${supplier.name}\" from the directory?")
             .setPositiveButton("Remove") { _, _ -> viewModel.delete(supplier.id) }
             .setNegativeButton("Cancel", null)
             .show()
@@ -250,12 +254,11 @@ class SupplierFormDialog(
 
         if (name.isEmpty()) { toast("Supplier Name is required"); return }
 
-        // 🛠️ FIXED: Only email requires a strict non-null fallback string
         val request = SupplierRequest(
             name = name,
             country = if (country.isEmpty()) "Local" else country,
             phone = phone.ifEmpty { null },
-            email = email.ifEmpty { "" }, // 💎 Passes empty string instead of null to prevent the mismatch error!
+            email = email.ifEmpty { "" },
             address = address.ifEmpty { null }
         )
 

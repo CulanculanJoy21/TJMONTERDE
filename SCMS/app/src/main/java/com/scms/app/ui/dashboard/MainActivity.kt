@@ -4,7 +4,11 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
@@ -29,6 +33,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navController: NavController
     private lateinit var appBarConfig: AppBarConfiguration
     lateinit var session: SessionManager
+    private var currentUnreadCount: Int = 0
+
+    // Instantiate our decoupled inner tracking listener
+    private val appBackgroundObserver = AppBackgroundObserver()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,11 +46,19 @@ class MainActivity : AppCompatActivity() {
         session = SessionManager(this)
         setSupportActionBar(binding.toolbar)
 
+        // 🛠️ Attach the decoupled inner helper class to the global process life map
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appBackgroundObserver)
+
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
 
-        appBarConfig = AppBarConfiguration(
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
+        val menu = binding.bottomNavView.menu
+
+        val topLevelDestinations = if (role == "field_personnel") {
+            setOf(R.id.nav_deliveries)
+        } else {
             setOf(
                 R.id.nav_dashboard,
                 R.id.nav_inventory,
@@ -51,27 +67,21 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_suppliers,
                 R.id.nav_approvals
             )
-        )
+        }
 
+        appBarConfig = AppBarConfiguration(topLevelDestinations)
         setupActionBarWithNavController(navController, appBarConfig)
         binding.bottomNavView.setupWithNavController(navController)
 
-        // 🔏 ROLE VISIBILITY SYSTEM ENFORCEMENT
-        val role = session.user?.role?.lowercase() ?: "field_personnel"
-        val menu = binding.bottomNavView.menu
-
         if (role == "field_personnel") {
-            // 🚚 1. Strips out all management panels from the driver's interface
             menu.findItem(R.id.nav_dashboard)?.isVisible = false
             menu.findItem(R.id.nav_inventory)?.isVisible = false
             menu.findItem(R.id.nav_orders)?.isVisible = false
             menu.findItem(R.id.nav_suppliers)?.isVisible = false
             menu.findItem(R.id.nav_approvals)?.isVisible = false
 
-            // 🎯 2. Programmatically force navigation context to land straight on Deliveries
             navController.navigate(R.id.nav_deliveries)
         } else {
-            // Standard management visibility gates for Admin and Managers
             if (role != "admin") {
                 menu.findItem(R.id.nav_approvals)?.isVisible = false
             }
@@ -80,9 +90,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Only kick off badge notification checking if they can actually see the dashboard layout badge
         if (role != "field_personnel") {
             startNotificationPolling()
+        }
+    }
+
+    // ─── 🔏 DECOUPLED LIFECYCLE OBSERVER HELPER CLASS ───
+    private inner class AppBackgroundObserver : DefaultLifecycleObserver {
+        override fun onStop(owner: LifecycleOwner) {
+            // Triggers immediately when the app goes into the background
+            if (session.isLoggedIn) {
+                // Fast local eviction so the next boot is guaranteed to force LoginActivity
+                session.clear()
+
+                // Fire the backend API token revocation on a background thread without blocking the OS suspension
+                Thread {
+                    try {
+                        // 🛠️ FIXED: Changed .logout() to .logoutSync() to match your new API interface method!
+                        RetrofitClient.instance.logoutSync().execute()
+                    } catch (_: Exception) {}
+                }.start()
+            }
         }
     }
 
@@ -96,8 +124,8 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val result = safeApiCall { RetrofitClient.instance.getNotifications() }
                     if (result is Resource.Success) {
-                        val unread = result.data.data.count { !it.isRead }
-                        runOnUiThread { updateNotificationBadge(unread) }
+                        currentUnreadCount = result.data.data.count { !it.isRead }
+                        runOnUiThread { updateNotificationBadge(currentUnreadCount) }
                     }
                 } catch (_: Exception) {}
 
@@ -107,11 +135,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun updateNotificationBadge(count: Int) {
-        // Safe check ensures we don't fetch or crash on a hidden layout view element
-        if (session.user?.role?.lowercase() != "field_personnel") {
-            val badge = binding.bottomNavView.getOrCreateBadge(R.id.nav_dashboard)
-            badge.isVisible = count > 0
-            if (count > 0) badge.number = count
+        if (session.user?.role?.lowercase() == "field_personnel") return
+
+        val notificationItem = binding.toolbar.menu.findItem(R.id.action_notifications)
+        if (notificationItem != null) {
+            if (count > 0) {
+                notificationItem.title = "Notifications ($count)"
+            } else {
+                notificationItem.title = "Notifications"
+            }
         }
     }
 
@@ -120,18 +152,53 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
+
+        if (currentUnreadCount > 0) {
+            updateNotificationBadge(currentUnreadCount)
+        }
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.action_logout) { logout(); return true }
+        when (item.itemId) {
+            R.id.action_notifications -> {
+                try {
+                    navController.navigate(R.id.nav_notifications)
+                } catch (e: Exception) {
+                    navController.navigate(R.id.nav_dashboard)
+                }
+                return true
+            }
+            R.id.action_toolbar_profile -> {
+                try {
+                    navController.navigate(R.id.nav_profile)
+                } catch (e: Exception) {
+                    navController.navigate(R.id.nav_dashboard)
+                }
+                return true
+            }
+        }
         return super.onOptionsItemSelected(item)
     }
 
     fun logout() {
-        lifecycleScope.launch { safeApiCall { RetrofitClient.instance.logout() } }
+        // Clear local credentials instantly to secure the UI state
         session.clear()
-        startActivity(Intent(this, LoginActivity::class.java))
+
+        lifecycleScope.launch {
+            safeApiCall { RetrofitClient.instance.logout() }
+        }
+
+        val intent = Intent(this@MainActivity, LoginActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
         finish()
+    }
+
+    override fun onDestroy() {
+        // Clean up our decoupled observer tracking securely
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(appBackgroundObserver)
+        super.onDestroy()
     }
 }

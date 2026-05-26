@@ -4,55 +4,161 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="#F7F9FC">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
-        android:orientation="vertical" android:padding="16dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:scrollbars="none" android:layout_marginBottom="12dp">
-            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <com.google.android.material.chip.Chip android:id="@+id/chipAll"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="All" android:layout_marginEnd="6dp"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-                <com.google.android.material.chip.Chip android:id="@+id/chipPending"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Pending" android:layout_marginEnd="6dp"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-                <com.google.android.material.chip.Chip android:id="@+id/chipInTransit"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="In Transit" android:layout_marginEnd="6dp"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-                <com.google.android.material.chip.Chip android:id="@+id/chipOutForDelivery"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="Out For Delivery" android:layout_marginEnd="6dp"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
-                <com.google.android.material.chip.Chip android:id="@+id/chipDelivered"
-                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Track Shipments"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="#111827" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Manage system dispatch itineraries"
+                android:textSize="13sp"
+                android:textColor="#6B7280"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:clipToPadding="false"
+            android:paddingHorizontal="20dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipAll"
+                    style="@style/Widget.MaterialComponents.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="All"
+                    android:layout_marginEnd="8dp"
+                    app:chipBackgroundColor="@color/white"
+                    app:chipStrokeColor="#E5E7EB"
+                    app:chipStrokeWidth="1dp"
+                    app:cornerRadius="20dp" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipPending"
+                    style="@style/Widget.MaterialComponents.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Pending"
+                    android:layout_marginEnd="8dp"
+                    app:chipBackgroundColor="@color/white"
+                    app:chipStrokeColor="#E5E7EB"
+                    app:chipStrokeWidth="1dp"
+                    app:cornerRadius="20dp" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipInTransit"
+                    style="@style/Widget.MaterialComponents.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="In Transit"
+                    android:layout_marginEnd="8dp"
+                    app:chipBackgroundColor="@color/white"
+                    app:chipStrokeColor="#E5E7EB"
+                    app:chipStrokeWidth="1dp"
+                    app:cornerRadius="20dp" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipOutForDelivery"
+                    style="@style/Widget.MaterialComponents.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Out For Delivery"
+                    android:layout_marginEnd="8dp"
+                    app:chipBackgroundColor="@color/white"
+                    app:chipStrokeColor="#E5E7EB"
+                    app:chipStrokeWidth="1dp"
+                    app:cornerRadius="20dp" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipDelivered"
+                    style="@style/Widget.MaterialComponents.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
                     android:text="Delivered"
-                    style="@style/Widget.MaterialComponents.Chip.Filter" />
+                    app:chipBackgroundColor="@color/white"
+                    app:chipStrokeColor="#E5E7EB"
+                    app:chipStrokeWidth="1dp"
+                    app:cornerRadius="20dp" />
             </LinearLayout>
         </HorizontalScrollView>
 
-        <ProgressBar android:id="@+id/progressBar" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:layout_gravity="center"
-            android:visibility="gone" />
-
-        <TextView android:id="@+id/tvEmpty" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:text="No deliveries scheduled"
-            android:textColor="@color/text_secondary" android:layout_gravity="center"
-            android:visibility="gone" android:layout_marginTop="32dp" />
-
-        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-            android:id="@+id/swipeRefresh" android:layout_width="match_parent"
+        <FrameLayout
+            android:layout_width="match_parent"
             android:layout_height="match_parent">
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recyclerView" android:layout_width="match_parent"
-                android:layout_height="match_parent" android:clipToPadding="false"
-                android:paddingBottom="80dp" />
-        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
-    </LinearLayout>
 
+            <ProgressBar
+                android:id="@+id/progressBar"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="#0062FF"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/layoutEmptyState"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_gravity="center"
+                android:visibility="gone">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📭"
+                    android:textSize="44sp" />
+                <TextView
+                    android:id="@+id/tvEmpty"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No deliveries scheduled"
+                    android:textSize="14sp"
+                    android:textColor="#9CA3AF"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/swipeRefresh"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="92dp" />
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+        </FrameLayout>
+    </LinearLayout>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

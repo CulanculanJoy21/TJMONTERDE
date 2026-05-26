@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
 
+    implementation("androidx.lifecycle:lifecycle-process:2.8.0")
     // CRITICAL FIX: Architecture Lifecycle Extensions (Fixes 'lifecycleScope' across all fragments)
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")

@@ -4,39 +4,43 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp">
+    android:layout_marginBottom="14dp"
+    android:layout_marginHorizontal="16dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="3dp"
+    app:cardBackgroundColor="@color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
+            android:layout_marginBottom="12dp">
+
             <TextView
                 android:id="@+id/tvDeliveryId"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textSize="15sp"
+                android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="@color/primary"
-                android:fontFamily="monospace" />
+                android:textColor="#111827" />
+
             <TextView
                 android:id="@+id/tvStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="11sp"
+                android:textStyle="bold"
                 android:textColor="@color/white"
-                android:paddingHorizontal="10dp"
-                android:paddingVertical="4dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
                 android:background="@drawable/bg_badge_green" />
         </LinearLayout>
 
@@ -45,83 +49,86 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginBottom="2dp" />
+            android:textColor="#9CA3AF"
+            android:layout_marginBottom="4dp" />
 
         <TextView
             android:id="@+id/tvProduct"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="8dp" />
+            android:textColor="#111827"
+            android:layout_marginBottom="16dp" />
 
         <LinearLayout
             android:id="@+id/layoutPickupGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone">
+            android:background="#F3F4F6"
+            android:padding="12dp"
+            android:layout_marginBottom="12dp">
+
             <TextView
                 android:id="@+id/tvSupplierName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textStyle="bold"
                 android:textSize="13sp"
-                android:textColor="@color/primary" />
+                android:textColor="#0062FF" />
+
             <TextView
                 android:id="@+id/tvSupplierAddress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="12sp"
-                android:textColor="@color/text_secondary"
+                android:textColor="#6B7280"
                 android:layout_marginTop="2dp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="4dp">
-            <TextView
-                android:id="@+id/tvDriver"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textSize="12sp"
-                android:textColor="@color/text_secondary" />
-            <TextView
-                android:id="@+id/tvEta"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="@color/text_secondary" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/tvDestination"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:textColor="#374151"
             android:layout_marginBottom="12dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
+            android:layout_marginBottom="16dp">
+            <TextView
+                android:id="@+id/tvDriver"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="12sp"
+                android:textColor="#6B7280" />
+            <TextView
+                android:id="@+id/tvEta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="#6B7280" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
             <View android:id="@+id/progress1"
                 android:layout_width="0dp" android:layout_height="6dp" android:layout_weight="1"
-                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="3dp" android:layout_marginStart="0dp" />
+                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="4dp" />
             <View android:id="@+id/progress2"
                 android:layout_width="0dp" android:layout_height="6dp" android:layout_weight="1"
-                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="3dp" />
+                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="4dp" />
             <View android:id="@+id/progress3"
                 android:layout_width="0dp" android:layout_height="6dp" android:layout_weight="1"
-                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="3dp" />
+                android:background="@drawable/bg_delivery_progress_line" android:layout_marginEnd="4dp" />
             <View android:id="@+id/progress4"
                 android:layout_width="0dp" android:layout_height="6dp" android:layout_weight="1"
                 android:background="@drawable/bg_delivery_progress_line" />
@@ -131,33 +138,29 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="end|center_vertical"
-            android:layout_marginTop="10dp">
+            android:gravity="end|center_vertical">
 
-            <com.google.android.material.button.MaterialButton
+            <ImageButton
                 android:id="@+id/btnDeleteDelivery"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_marginEnd="8dp"
-                android:padding="0dp"
-                android:insetLeft="0dp"
-                android:insetTop="0dp"
-                android:insetRight="0dp"
-                android:insetBottom="0dp"
-                app:icon="@android:drawable/ic_menu_delete"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconTint="@color/error"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_delete"
+                android:contentDescription="Delete Delivery"
                 android:visibility="gone"
-                style="@style/Widget.MaterialComponents.Button.TextButton" />
+                app:tint="#EF4444" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnUpdateStatus"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="44dp"
                 android:text="Update Status"
-                android:textSize="12sp"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                android:textSize="13sp"
+                android:textStyle="bold"
+                app:cornerRadius="22dp"
+                app:backgroundTint="#0062FF"
+                style="@style/Widget.MaterialComponents.Button.UnelevatedButton" />
         </LinearLayout>
 
     </LinearLayout>

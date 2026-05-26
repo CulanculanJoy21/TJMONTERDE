@@ -25,6 +25,8 @@ import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 import androidx.lifecycle.MutableLiveData
 
+// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
+
 class InventoryViewModel : ViewModel() {
     val products = MutableLiveData<Resource<List<Product>>>()
     val deleteResult = MutableLiveData<Resource<Unit>>()
@@ -57,6 +59,8 @@ class InventoryViewModel : ViewModel() {
     }
 }
 
+// ─── ADAPTER ─────────────────────────────────────────────────────────────────
+
 class ProductAdapter(
     private var items: List<Product>,
     private val userRole: String?,
@@ -75,7 +79,7 @@ class ProductAdapter(
         val p = items[position]
         holder.binding.apply {
             tvProductName.text = p.name
-            tvSku.text = p.sku
+            tvSku.text = "SKU: ${p.sku}"
             tvCategory.text = p.category
             tvStock.text = "${p.stockQty} ${p.unit ?: "pcs"}"
             tvPrice.text = formatCurrency(p.unitPrice)
@@ -91,21 +95,20 @@ class ProductAdapter(
                 tvStock.setTextColor(root.context.getColor(android.R.color.holo_green_dark))
             }
 
-            // 🔏 ROLE SYSTEM ENFORCEMENT: Only Admins can modify live catalog entries directly
+            // 🔏 ROLE SYSTEM ENFORCEMENT: Native visibility flags used to fix compile issues
             val role = userRole?.lowercase() ?: "field_personnel"
             if (role == "admin") {
-                btnEdit.show()
-                btnDelete.show()
+                btnEdit.visibility = View.VISIBLE
+                btnDelete.visibility = View.VISIBLE
                 btnEdit.setOnClickListener { onEdit(p) }
                 btnDelete.setOnClickListener { onDelete(p) }
             } else if (role == "manager") {
-                // Managers can click Edit to request modifications, but Delete is completely hidden
-                btnEdit.show()
-                btnDelete.hide()
+                btnEdit.visibility = View.VISIBLE
+                btnDelete.visibility = View.GONE
                 btnEdit.setOnClickListener { onEdit(p) }
             } else {
-                btnEdit.hide()
-                btnDelete.hide()
+                btnEdit.visibility = View.GONE
+                btnDelete.visibility = View.GONE
             }
         }
     }
@@ -115,6 +118,8 @@ class ProductAdapter(
         notifyDataSetChanged()
     }
 }
+
+// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class InventoryFragment : Fragment() {
 
@@ -145,23 +150,17 @@ class InventoryFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         binding.swipeRefresh.setOnRefreshListener { viewModel.load() }
 
-        // 🛠️ SHARED ACCESS ENFORCEMENT: Admins and Managers get creation FABs
-        // 🛠️ FIXED: Clear, separate action routing for Admins and Managers
         when (role) {
             "admin", "manager" -> {
-                binding.fabAdd.show()
-                binding.fabAdd.setImageResource(android.R.drawable.ic_input_add)
+                binding.fabAdd.visibility = View.VISIBLE
                 binding.fabAdd.setOnClickListener {
-                    // Both roles see the clean menu options interface block
                     val options = arrayOf("Request/Add Product Profile", "Dispatch Outbound Stock")
                     AlertDialog.Builder(requireContext())
                         .setTitle("Inventory Operations")
                         .setItems(options) { _, which ->
                             if (which == 0) {
-                                // Admin adds live directly; Manager triggers the 202 Staging Intercept built below
                                 ProductFormDialog(null) { viewModel.load() }.show(childFragmentManager, "add")
                             } else {
-                                // Both roles can now drop right into the dispatching deduction workflow view
                                 ProductFormDialog.DispatchStockDialog { viewModel.load() }.show(childFragmentManager, "dispatch")
                             }
                         }
@@ -169,8 +168,7 @@ class InventoryFragment : Fragment() {
                 }
             }
             else -> {
-                // Keep the UI completely clean for Drivers / Field Personnel
-                binding.fabAdd.hide()
+                binding.fabAdd.visibility = View.INVISIBLE
             }
         }
 
@@ -185,15 +183,22 @@ class InventoryFragment : Fragment() {
 
         viewModel.products.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
-                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
+                is Resource.Error -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
+                    toast(state.message)
+                }
             }
         }
 
@@ -216,6 +221,8 @@ class InventoryFragment : Fragment() {
 
     override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }
+
+// ─── DIALOG FORM SUBSYSTEMS ───────────────────────────────────────────────────
 
 class ProductFormDialog(
     private val product: Product?,
@@ -315,7 +322,6 @@ class ProductFormDialog(
                     dismiss()
                 }
                 is Resource.Error -> {
-                    // 🔏 INTERCEPT: Catches manager submissions or edits and alerts them of staging statuses cleanly
                     if (result.message.contains("submitted for Admin review", ignoreCase = true) ||
                         result.message.contains("202") ||
                         result.message.contains("review", ignoreCase = true)) {
@@ -334,6 +340,9 @@ class ProductFormDialog(
         }
     }
 
+    override fun onDestroyView() { super.onDestroyView(); _binding = null }
+
+    // ─── INTERNAL WAREHOUSE DISPATCH DEDUCTIONS DOCK ───
     class DispatchStockDialog(private val onSuccess: () -> Unit) : BottomSheetDialogFragment() {
         private var _binding: com.scms.app.databinding.DialogDispatchFormBinding? = null
         private val binding get() = _binding!!

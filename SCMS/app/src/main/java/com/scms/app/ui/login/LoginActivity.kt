@@ -2,6 +2,7 @@ package com.scms.app.ui.login
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
@@ -13,11 +14,11 @@ import com.scms.app.models.LoginRequest
 import com.scms.app.ui.dashboard.MainActivity
 import com.scms.app.utils.Resource
 import com.scms.app.utils.SessionManager
-import com.scms.app.utils.hide
 import com.scms.app.utils.safeApiCall
-import com.scms.app.utils.show
 import com.scms.app.utils.toast
 import kotlinx.coroutines.launch
+
+// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
 
 class LoginViewModel : ViewModel() {
     val loginState = MutableLiveData<Resource<Unit>>()
@@ -42,6 +43,8 @@ class LoginViewModel : ViewModel() {
     }
 }
 
+// ─── ACTIVITY ─────────────────────────────────────────────────────────────────
+
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
@@ -55,14 +58,15 @@ class LoginActivity : AppCompatActivity() {
 
         session = SessionManager(this)
 
-        // Auto-login if token exists
+        // Auto-login setup redirection layer
         if (session.isLoggedIn) {
             RetrofitClient.setToken(session.token)
             goToMain()
             return
         }
 
-        binding.btnLogin.setOnClickListener {
+        // 🛠️ FIXED: Target the updated button element layout identifier token (btnSignIn)
+        binding.btnSignIn.setOnClickListener {
             val email    = binding.etEmail.text?.toString()?.trim() ?: ""
             val password = binding.etPassword.text?.toString() ?: ""
 
@@ -77,18 +81,20 @@ class LoginActivity : AppCompatActivity() {
         viewModel.loginState.observe(this) { state ->
             when (state) {
                 is Resource.Loading -> {
-                    binding.progressBar.show()
-                    binding.btnLogin.isEnabled = false
+                    // 🛠️ FIXED: Clean text toggle changes instead of crashing on a missing layout bar view
+                    binding.btnSignIn.text = "Signing in..."
+                    binding.btnSignIn.isEnabled = false
                 }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
-                    binding.btnLogin.isEnabled = true
+                    binding.btnSignIn.text = "Continue"
+                    binding.btnSignIn.isEnabled = true
                     goToMain()
                 }
                 is Resource.Error -> {
-                    binding.progressBar.hide()
-                    binding.btnLogin.isEnabled = true
-                    toast("Login failed: ${state.message}")
+                    binding.btnSignIn.text = "Continue"
+                    binding.btnSignIn.isEnabled = true
+                    // Shows the comprehensive, clean security error toast messages
+                    toast(state.message)
                 }
             }
         }

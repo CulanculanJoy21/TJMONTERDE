@@ -100,7 +100,8 @@ data class Order(
 data class ProductBrief(
     val id: Int,
     val name: String,
-    val sku: String?
+    val sku: String?,
+    val supplier: Supplier? = null // 🛠️ ADDED: Backup relationship mapping
 )
 
 data class OrderRequest(
@@ -134,8 +135,9 @@ data class Delivery(
 
 data class OrderBrief(
     val id: Int,
-    @SerializedName("product_id") val productId: Int?, // 🛠️ ADDED: Foreign relational key parameter mapping
-    val product: ProductBrief?
+    @SerializedName("product_id") val productId: Int?,
+    val product: ProductBrief?,
+    val supplier: Supplier? = null // 🛠️ ADDED: Lets the delivery model grab pickup supplier profiles directly
 )
 
 data class UserBrief(

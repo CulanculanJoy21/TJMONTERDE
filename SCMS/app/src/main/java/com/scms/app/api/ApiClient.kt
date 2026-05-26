@@ -3,6 +3,7 @@ package com.scms.app.api
 import com.scms.app.models.*
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Call
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -17,6 +18,10 @@ interface ScmsApi {
 
     @POST("auth/logout")
     suspend fun logout(): Response<MessageResponse>
+
+    // 🛠️ ADDED: Synchronous companion call mapping that supports immediate .execute() on background threads
+    @POST("auth/logout")
+    fun logoutSync(): Call<MessageResponse>
 
     @GET("auth/me")
     suspend fun me(): Response<User>
@@ -103,7 +108,6 @@ interface ScmsApi {
     @PATCH("deliveries/{id}/status")
     suspend fun updateDeliveryStatus(@Path("id") id: Int, @Body request: DeliveryStatusRequest): Response<Delivery>
 
-    // 🛠️ ADDED: Administrative delivery purging node endpoint signature mapping
     @DELETE("deliveries/{id}")
     suspend fun deleteDelivery(@Path("id") id: Int): Response<MessageResponse>
 
@@ -126,6 +130,7 @@ interface ScmsApi {
 
     @POST("notifications/read-all")
     suspend fun markAllNotificationsRead(): Response<MessageResponse>
+
     // Approvals
     @GET("approvals")
     suspend fun getPendingApprovals(): Response<List<ApprovalRequestMobile>>
@@ -154,8 +159,6 @@ object RetrofitClient {
             token?.let { addHeader("Authorization", "Bearer $it") }
             addHeader("Accept", "application/json")
             addHeader("Content-Type", "application/json")
-
-            // 🛠️ FIXED: Tells Laravel this request is coming from the mobile client
             addHeader("X-Client-Platform", "android")
         }.build()
         chain.proceed(request)
@@ -169,10 +172,10 @@ object RetrofitClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // FIXED: Using a direct string literal bypasses the cache glitch entirely!
     val instance: ScmsApi by lazy {
         Retrofit.Builder()
-            .baseUrl("http://10.0.2.2:8000/api/") // Direct local emulator path string
+        // 🛠️ CHANGED: Swap 10.0.2.2 with your computer's real local IP address 192.168.1.39
+            .baseUrl("http://10.0.2.2:8000/api/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

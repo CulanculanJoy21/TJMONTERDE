@@ -72,14 +72,17 @@ class NotificationAdapter(
         holder.binding.apply {
             tvTitle.text   = n.title
             tvMessage.text = n.message
-            tvTime.text    = (n.createdAt).take(10)
+            tvTime.text    = n.createdAt.take(10)
 
-            viewUnread.visibility = if (!n.isRead) View.VISIBLE else View.INVISIBLE
-
-            root.setBackgroundColor(
-                if (!n.isRead) root.context.getColor(com.scms.app.R.color.primary_light)
-                else root.context.getColor(com.scms.app.R.color.surface)
-            )
+            // 🛠️ FIXED: Uses native structural flags instead of custom extension calls
+            if (!n.isRead) {
+                viewUnread.visibility = View.VISIBLE
+                root.alpha = 1.0f
+            } else {
+                viewUnread.visibility = View.GONE
+                // Gives read items a clean, soft faded layout style without changing card background structures
+                root.alpha = 0.65f
+            }
 
             root.setOnClickListener {
                 if (!n.isRead) onMarkRead(n)
@@ -111,7 +114,6 @@ class NotificationsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        setHasOptionsMenu(true)
 
         adapter = NotificationAdapter(emptyList()) { n ->
             viewModel.markRead(n.id)
@@ -128,20 +130,22 @@ class NotificationsFragment : Fragment() {
 
         viewModel.notifications.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapter.update(state.data)
-                    binding.tvEmpty.visibility =
-                        if (state.data.isEmpty()) View.VISIBLE else View.GONE
+                    binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
 
                     val unread = state.data.count { !it.isRead }
-                    binding.tvUnreadCount.text = "$unread unread"
+                    binding.tvUnreadCount.text = "$unread unread updates"
                 }
                 is Resource.Error -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
                     toast(state.message)
                 }

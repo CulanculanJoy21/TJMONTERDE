@@ -8,6 +8,9 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
 import com.scms.app.models.User
 import retrofit2.Response
+import android.widget.TextView
+import com.scms.app.R
+
 
 // ─── SESSION MANAGER ──────────────────────────────────────────────────────────
 class SessionManager(context: Context) {
@@ -120,5 +123,30 @@ fun statusLabel(status: String): String = when (status?.lowercase()?.trim()) {
     "cancelled"        -> "Cancelled" // 🛠️ FIXED: Add display string matching for cancellations
     else               -> status.replace("_", " ").replaceFirstChar { it.uppercase() }
 }
-
+// ─── ADD THIS GLOBAL STATUS BADGE STYLER ───
+fun styleStatusBadge(textView: TextView, status: String) {
+    val context = textView.context
+    when (status.lowercase()) {
+        "pending" -> {
+            textView.setBackgroundResource(R.drawable.bg_badge_pending_soft)
+            textView.setTextColor(context.getColor(android.R.color.holo_orange_dark))
+        }
+        "in_transit", "shipped", "out_for_delivery" -> {
+            textView.setBackgroundResource(R.drawable.bg_badge_transit_soft)
+            textView.setTextColor(context.getColor(android.R.color.holo_blue_dark))
+        }
+        "delivered", "approved" -> {
+            textView.setBackgroundResource(R.drawable.bg_badge_delivered_soft)
+            textView.setTextColor(context.getColor(android.R.color.holo_green_dark))
+        }
+        "cancelled", "rejected" -> {
+            textView.setBackgroundResource(R.drawable.bg_badge_rejected_soft)
+            textView.setTextColor(context.getColor(android.R.color.holo_red_dark))
+        }
+        else -> {
+            textView.setBackgroundResource(R.drawable.bg_badge_pending_soft)
+            textView.setTextColor(context.getColor(android.R.color.darker_gray))
+        }
+    }
+}
 fun formatCurrency(amount: Double): String = "₱%,.2f".format(amount)

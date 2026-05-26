@@ -75,25 +75,27 @@ class OrderAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val o = items[position]
         holder.binding.apply {
-            tvOrderId.text    = "#${o.id}"
+            tvOrderId.text    = "REQ-${o.id}"
             tvProduct.text    = o.product?.name ?: "—"
-            tvSupplier.text   = o.supplier?.name ?: "—"
-            tvQty.text        = "Qty: ${o.qty}"
+            tvSupplier.text   = "From: ${o.supplier?.name ?: "—"}"
+            tvQty.text        = "${o.qty} units"
             tvTotal.text      = formatCurrency(o.totalAmount)
-            tvDate.text       = o.createdAt.take(10)
-            tvStatus.text     = statusLabel(o.status)
-            tvStatus.setBackgroundColor(root.context.getColor(statusColor(o.status)))
+            tvDate.text       = "Requested: ${o.createdAt.take(10)}"
 
-            // 🔏 ROLE ENFORCEMENT: Only Admin accounts can reveal approval controls
+            // 🛠️ FIXED: Swapped out the 'd.' variable typo mismatch for 'o.status'
+            tvStatus.text = statusLabel(o.status)
+            styleStatusBadge(tvStatus, o.status)
+
+            // 🔏 ROLE ENFORCEMENT: Correct native visibility constants clear compilation blocks
             val role = userRole?.lowercase() ?: "field_personnel"
             if (role == "admin" && o.status == "pending") {
-                btnApprove.show()
-                btnReject.show()
+                btnApprove.visibility = View.VISIBLE
+                btnReject.visibility = View.VISIBLE
                 btnApprove.setOnClickListener { onApprove(o) }
                 btnReject.setOnClickListener { onReject(o) }
             } else {
-                btnApprove.hide()
-                btnReject.hide()
+                btnApprove.visibility = View.GONE
+                btnReject.visibility = View.GONE
             }
         }
     }
@@ -137,7 +139,6 @@ class OrdersFragment : Fragment() {
 
         binding.swipeRefresh.setOnRefreshListener { viewModel.load(currentFilter) }
 
-        // Filter chips bindings
         binding.chipAll.setOnClickListener      { currentFilter = null;        viewModel.load(null) }
         binding.chipPending.setOnClickListener  { currentFilter = "pending";   viewModel.load("pending") }
         binding.chipApproved.setOnClickListener { currentFilter = "approved";  viewModel.load("approved") }
@@ -145,25 +146,26 @@ class OrdersFragment : Fragment() {
         binding.chipDelivered.setOnClickListener{ currentFilter = "delivered"; viewModel.load("delivered") }
         binding.chipRejected.setOnClickListener { currentFilter = "rejected";  viewModel.load("rejected") }
 
-        // Contextual FAB visibility check
-        // 🛠️ FORCED VISIBILITY: Showing the button unconditionally for testing
-        binding.fabAdd.show()
+        binding.fabAdd.visibility = View.VISIBLE
         binding.fabAdd.setOnClickListener {
             OrderFormDialog { viewModel.load(currentFilter) }.show(childFragmentManager, "add_order")
         }
 
         viewModel.orders.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
                 is Resource.Error -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
                     toast(state.message)
                 }
@@ -182,7 +184,7 @@ class OrdersFragment : Fragment() {
         val label = if (action == "approved") "Approve" else "Reject"
         AlertDialog.Builder(requireContext())
             .setTitle("$label Order")
-            .setMessage("$label order #${order.id}?")
+            .setMessage("$label order #\${order.id}?")
             .setPositiveButton(label) { _, _ -> viewModel.updateStatus(order.id, action) }
             .setNegativeButton("Cancel", null)
             .show()

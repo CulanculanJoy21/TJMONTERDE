@@ -14,6 +14,8 @@ import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
 
+// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
+
 class DashboardViewModel : ViewModel() {
     val stats = MutableLiveData<Resource<DashboardStats>>()
     fun load() {
@@ -23,6 +25,8 @@ class DashboardViewModel : ViewModel() {
         }
     }
 }
+
+// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class DashboardFragment : Fragment() {
 
@@ -45,18 +49,19 @@ class DashboardFragment : Fragment() {
                 when (state) {
                     is Resource.Loading -> {
                         if (!binding.swipeRefresh.isRefreshing) {
-                            binding.progressBar.show()
-                            binding.contentGroup.hide()
+                            // 🛠️ FIXED: Replaced custom extension helpers with clean native view visibility parameters
+                            binding.progressBar.visibility = View.VISIBLE
+                            binding.contentGroup.visibility = View.GONE
                         }
                     }
                     is Resource.Success -> {
-                        binding.progressBar.hide()
+                        binding.progressBar.visibility = View.GONE
                         binding.swipeRefresh.isRefreshing = false
-                        binding.contentGroup.show()
+                        binding.contentGroup.visibility = View.VISIBLE
                         bindStats(state.data)
                     }
                     is Resource.Error -> {
-                        binding.progressBar.hide()
+                        binding.progressBar.visibility = View.GONE
                         binding.swipeRefresh.isRefreshing = false
                         toast(state.message)
                     }

@@ -88,14 +88,15 @@ class DeliveryAdapter(
             tvDriver.text      = d.driver?.name ?: "Unassigned"
             tvDestination.text = "Deliver To: ${d.destination}"
 
-            // 🚚 FIXED: Map Supplier Pickup Information cleanly onto the card UI fields
-            val supplierObj = d.order?.supplier
+            // 🚚 FIXED: Uses standard visibility flags to match layout changes safely without unresolved flags
+            val supplierObj = d.order?.supplier ?: d.order?.product?.supplier
+
             if (supplierObj != null) {
                 tvSupplierName.text = "Pickup From: ${supplierObj.name}"
                 tvSupplierAddress.text = supplierObj.address ?: "Address not listed"
-                layoutPickupGroup.show()
+                layoutPickupGroup.visibility = View.VISIBLE
             } else {
-                layoutPickupGroup.hide()
+                layoutPickupGroup.visibility = View.GONE
             }
 
             val rawEta = d.eta
@@ -121,8 +122,9 @@ class DeliveryAdapter(
             } else {
                 tvEta.text = "ETA: —"
             }
-            tvStatus.text      = statusLabel(d.status)
-            tvStatus.setBackgroundColor(root.context.getColor(statusColor(d.status)))
+            tvStatus.text = statusLabel(d.status)
+
+            styleStatusBadge(tvStatus, d.status)
 
             val steps = listOf("pending", "in_transit", "out_for_delivery", "delivered")
             val stepIdx = steps.indexOf(d.status)
@@ -134,8 +136,8 @@ class DeliveryAdapter(
             val role = userRole?.lowercase() ?: "field_personnel"
 
             if (d.status != "delivered" && d.status != "cancelled") {
-                btnUpdateStatus.show()
-                btnUpdateStatus.setOnClickListener { onUpdateStatus(d.id, "prompt") }
+                btnUpdateStatus.visibility = View.VISIBLE
+                btnUpdateStatus.setOnClickListener { onUpdateStatus(d.id, d.status) }
 
                 tvDeliveryId.setOnLongClickListener {
                     if (role == "admin" || role == "manager") {
@@ -153,15 +155,15 @@ class DeliveryAdapter(
                     true
                 }
             } else {
-                btnUpdateStatus.hide()
+                btnUpdateStatus.visibility = View.GONE
                 tvDeliveryId.setOnLongClickListener(null)
             }
 
             if (role == "admin" && (d.status == "delivered" || d.status == "cancelled")) {
-                btnDeleteDelivery.show()
+                btnDeleteDelivery.visibility = View.VISIBLE
                 btnDeleteDelivery.setOnClickListener { onDeleteDelivery(d) }
             } else {
-                btnDeleteDelivery.hide()
+                btnDeleteDelivery.visibility = View.GONE
             }
         }
     }
@@ -195,11 +197,11 @@ class DeliveriesFragment : Fragment() {
         adapter = DeliveryAdapter(
             emptyList(),
             userRole = session.user?.role,
-            onUpdateStatus = { id, action ->
-                if (action == "cancelled") {
+            onUpdateStatus = { id, currentStatus ->
+                if (currentStatus == "cancelled") {
                     viewModel.updateStatus(id, "cancelled")
                 } else {
-                    showStatusPicker(id)
+                    showStatusPicker(id, currentStatus)
                 }
             },
             onDeleteDelivery = { delivery ->
@@ -224,15 +226,27 @@ class DeliveriesFragment : Fragment() {
 
         viewModel.deliveries.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
-                is Resource.Success -> {
-                    binding.progressBar.hide()
-                    binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
-                    adapter.update(state.data)
-                    binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                    binding.layoutEmptyState.visibility = View.GONE
+                    // 🛠️ FIXED: Safe check to stop refresh animation if loading was triggered manually
+                    binding.swipeRefresh.isRefreshing = true
                 }
-                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
+                is Resource.Success -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
+                    binding.recyclerView.visibility = View.VISIBLE
+
+                    adapter.update(state.data)
+
+                    binding.layoutEmptyState.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
+                }
+                is Resource.Error -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
+                    toast(state.message)
+                }
             }
         }
 
@@ -249,15 +263,39 @@ class DeliveriesFragment : Fragment() {
         viewModel.load()
     }
 
-    private fun showStatusPicker(deliveryId: Int) {
-        val statuses = arrayOf("Pending", "In Transit", "Out for Delivery", "Delivered")
-        val values   = arrayOf("pending", "in_transit", "out_for_delivery", "delivered")
+    private fun showStatusPicker(deliveryId: Int, currentStatus: String) {
+        val session = SessionManager(requireContext())
+        val role = session.user?.role?.lowercase() ?: "field_personnel"
 
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Update Delivery Status")
-            .setItems(statuses) { _, which -> viewModel.updateStatus(deliveryId, values[which]) }
-            .setNegativeButton("Cancel", null)
-            .show()
+        if (role == "field_personnel") {
+            val nextStatus = when (currentStatus.lowercase()) {
+                "pending"          -> "in_transit"
+                "in_transit"       -> "out_for_delivery"
+                "out_for_delivery" -> "delivered"
+                else               -> null
+            }
+
+            if (nextStatus != null) {
+                val readableLabel = nextStatus.replace("_", " ").replaceFirstChar { it.uppercase() }
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Advance Delivery Status")
+                    .setMessage("Update transit tracking status to: \"$readableLabel\"?")
+                    .setPositiveButton("Update") { _, _ -> viewModel.updateStatus(deliveryId, nextStatus) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            } else {
+                toast("Delivery completed. No further updates allowed.")
+            }
+        } else {
+            val statuses = arrayOf("Pending", "In Transit", "Out for Delivery", "Delivered")
+            val values   = arrayOf("pending", "in_transit", "out_for_delivery", "delivered")
+
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Override Delivery Status")
+                .setItems(statuses) { _, which -> viewModel.updateStatus(deliveryId, values[which]) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
     }
 
     override fun onDestroyView() { super.onDestroyView(); _binding = null }

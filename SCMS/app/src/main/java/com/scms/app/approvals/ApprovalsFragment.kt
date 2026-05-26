@@ -17,6 +17,8 @@ import com.scms.app.utils.*
 import kotlinx.coroutines.launch
 import com.google.gson.GsonBuilder
 
+// ─── VIEW MODEL ───────────────────────────────────────────────────────────────
+
 class ApprovalsViewModel : ViewModel() {
     val requests = MutableLiveData<Resource<List<ApprovalRequestMobile>>>()
     val reviewResult = MutableLiveData<Resource<String>>()
@@ -34,7 +36,6 @@ class ApprovalsViewModel : ViewModel() {
             val result = safeApiCall {
                 RetrofitClient.instance.reviewApproval(id, mapOf("status" to status, "review_note" to "Processed via Mobile App"))
             }
-            // 🛠️ FIXED: Smart-casting using a when block so Kotlin safely unboxes the error string
             when (result) {
                 is Resource.Success -> reviewResult.value = Resource.Success(status)
                 is Resource.Error -> reviewResult.value = Resource.Error(result.message)
@@ -43,6 +44,8 @@ class ApprovalsViewModel : ViewModel() {
         }
     }
 }
+
+// ─── ADAPTER ─────────────────────────────────────────────────────────────────
 
 class ApprovalsAdapter(
     private var items: List<ApprovalRequestMobile>,
@@ -60,8 +63,8 @@ class ApprovalsAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val r = items[position]
         holder.binding.apply {
-            tvAction.text = r.actionType
-            tvModule.text = r.modelType
+            tvAction.text = r.actionType.uppercase()
+            tvModule.text = r.modelType.replace("_", " ").replaceFirstChar { it.uppercase() }
             tvPayload.text = gson.toJson(r.payload)
             tvMeta.text = "By: ${r.user?.name ?: "Manager"} • ${r.createdAt.take(16).replace("T", " ")}"
 
@@ -72,6 +75,8 @@ class ApprovalsAdapter(
 
     fun update(newItems: List<ApprovalRequestMobile>) { items = newItems; notifyDataSetChanged() }
 }
+
+// ─── FRAGMENT ─────────────────────────────────────────────────────────────────
 
 class ApprovalsFragment : Fragment() {
     private var _binding: FragmentApprovalsBinding? = null
@@ -86,6 +91,7 @@ class ApprovalsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
         adapter = ApprovalsAdapter(emptyList()) { req, status -> viewModel.submitReview(req.id, status) }
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
@@ -94,15 +100,23 @@ class ApprovalsFragment : Fragment() {
 
         viewModel.requests.observe(viewLifecycleOwner) { state ->
             when (state) {
-                is Resource.Loading -> { binding.progressBar.show(); binding.recyclerView.hide() }
+                // 🛠️ FIXED: Replaced old .show() / .hide() custom extension hooks with clear native visibility constants
+                is Resource.Loading -> {
+                    binding.progressBar.visibility = View.VISIBLE
+                    binding.recyclerView.visibility = View.GONE
+                }
                 is Resource.Success -> {
-                    binding.progressBar.hide()
+                    binding.progressBar.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
-                    binding.recyclerView.show()
+                    binding.recyclerView.visibility = View.VISIBLE
                     adapter.update(state.data)
                     binding.tvEmpty.visibility = if (state.data.isEmpty()) View.VISIBLE else View.GONE
                 }
-                is Resource.Error -> { binding.progressBar.hide(); binding.swipeRefresh.isRefreshing = false; toast(state.message) }
+                is Resource.Error -> {
+                    binding.progressBar.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
+                    toast(state.message)
+                }
             }
         }
 
