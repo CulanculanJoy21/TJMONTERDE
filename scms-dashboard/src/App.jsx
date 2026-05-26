@@ -1688,7 +1688,6 @@ function UserManagementPage({ toast }) {
               <option value="field_personnel">Field Personnel (Driver)</option>
               <option value="manager">Manager</option>
               <option value="admin">Administrator</option>
-              <option value="supplier">Supplier Portal</option>
             </select>
           </Field>
           
