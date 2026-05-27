@@ -27,7 +27,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Auth, Profile & Identity ──
     Route::post('/auth/logout',   [AuthController::class, 'logout']);
     Route::get('/auth/me',        [AuthController::class, 'me']);
-    Route::put('/auth/profile',   [AuthorizationController::class, 'updateProfile']);
+    Route::put('/auth/profile',   [AuthController::class, 'updateProfile']); // 👈 FIXED: Changed from AuthorizationController to AuthController
     Route::put('/auth/password',  [AuthController::class, 'changePassword']);
 
     // ── STRICT ADMINISTRATIVE ROUTING (Admin Only Security Clearance) ──
@@ -35,6 +35,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         
         // Destructive Controls
+        Route::delete('/users/{id}',           [AuthController::class, 'destroy']); // 👈 NEW: Hooked up your user delete function
         Route::delete('/products/{product}',   [ProductController::class, 'destroy']);
         Route::delete('/orders/{id}',          [OrderController::class, 'destroy']);
         Route::delete('/deliveries/{delivery}', [DeliveryController::class, 'destroy']); 
@@ -55,7 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── ADMIN / MANAGER OPERATIONAL RESOURCE LAYER ──
     Route::middleware('role:admin,manager')->group(function () {
-        // Products / Inventory Management (Intercepts manager inside controller definitions)
+        // Products / Inventory Management
         Route::get('/products',                 [ProductController::class, 'index']);
         Route::post('/products',                [ProductController::class, 'store']);
         Route::get('/products/{product}',       [ProductController::class, 'show']);

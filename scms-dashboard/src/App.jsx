@@ -1577,8 +1577,12 @@ function UserManagementPage({ toast }) {
       setLoading(true);
       try {
         const res = await api.get("/users");
-        // Handles Laravel Pagination or standard array responses
-        const actualUsers = res.data ? res.data : (Array.isArray(res) ? res : []);
+        let actualUsers = [];
+        if (res && res.data) {
+          actualUsers = Array.isArray(res.data.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []);
+        } else if (Array.isArray(res)) {
+          actualUsers = res;
+        }
         setUsers(actualUsers);
       } catch (err) {
         console.error("Failed to load users", err);
@@ -1599,9 +1603,10 @@ function UserManagementPage({ toast }) {
 
     try {
       const res = await api.post("/auth/register", form);
-      
-      if (res && res.user) {
-        setUsers(prev => [...prev, res.user]);
+      const newUser = res?.user || res?.data?.user;
+
+      if (newUser) {
+        setUsers(prev => [...prev, newUser]);
         toast("User created successfully!", "success");
         setShowModal(false);
         setForm({ name: "", email: "", password: "", role: "field_personnel" });
@@ -1609,12 +1614,38 @@ function UserManagementPage({ toast }) {
     } catch (err) {
       const msg = err.response?.data?.message || "Check email uniqueness or password length";
       toast(msg, "error");
-      console.error("Registration failed:", err.response?.data);
+    }
+  };
+
+  // ─── NEW DELETE HANDLER ───
+  const handleDeleteUser = async (userId, userRole) => {
+    // Extra frontend safety check
+    if (userRole === "admin") {
+      toast("System Administrators cannot be deleted!", "error");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to permanently remove this user?")) {
+      return;
+    }
+
+    try {
+      await api.delete(`/users/${userId}`);
+      
+      // Remove the user from local state instantly
+      setUsers(prev => prev.filter(user => user.id !== userId));
+      toast("User record removed successfully", "success");
+    } catch (err) {
+      console.error("Failed to delete user", err);
+      toast(err.response?.data?.message || "Could not delete user account", "error");
     }
   };
 
   // 3. GUARD CLAUSE
   if (loading) return <Loading />;
+
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D1D5DB", marginTop: 6, boxSizing: "border-box" };
+  const selectStyle = { ...inputStyle, background: "#fff" };
 
   return (
     <div>
@@ -1635,7 +1666,7 @@ function UserManagementPage({ toast }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#F9FAFB" }}>
-                {["Name", "Email Address", "System Role", "Created At"].map(h => (
+                {["Name", "Email Address", "System Role", "Created At", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 500, color: "#6B7280" }}>{h}</th>
                 ))}
               </tr>
@@ -1646,11 +1677,36 @@ function UserManagementPage({ toast }) {
                   <td style={{ padding: "14px 16px", fontWeight: 500, color: "#111827" }}>{u.name}</td>
                   <td style={{ padding: "14px 16px", color: "#374151" }}>{u.email}</td>
                   <td style={{ padding: "14px 16px" }}><StatusBadge status={u.role} /></td>
-                  <td style={{ padding: "14px 16px", color: "#9CA3AF" }}>{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding: "14px 16px", color: "#9CA3AF" }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : "N/A"}</td>
+                  
+                  {/* Actions Column */}
+                  <td style={{ padding: "14px 16px" }}>
+                    {u.role !== "admin" ? (
+                      <button 
+                        onClick={() => handleDeleteUser(u.id, u.role)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#EF4444",
+                          cursor: "pointer",
+                          fontSize: 13,
+                          fontWeight: 500,
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4
+                        }}
+                      >
+                        <i className="ti ti-trash" /> Delete
+                      </button>
+                    ) : (
+                      <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>Protected</span>
+                    )}
+                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan="4" style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>No system users found.</td>
+                  <td colSpan="5" style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>No system users found.</td>
                 </tr>
               )}
             </tbody>
@@ -1670,17 +1726,7 @@ function UserManagementPage({ toast }) {
           </Field>
           
           <Field label="Initial Password">
-            <input 
-              type="password" 
-              value={form.password} 
-              onChange={e => setForm({...form, password: e.target.value})} 
-              style={inputStyle} 
-              placeholder="••••••••"
-            />
-            <p style={{ margin: "6px 0 0", fontSize: 12, color: "#6B7280", display: "flex", alignItems: "center", gap: 4 }}>
-              <i className="ti ti-info-circle" style={{ fontSize: 14 }} />
-              Must be at least 8 characters long.
-            </p>
+            <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} style={inputStyle} placeholder="••••••••" />
           </Field>
           
           <Field label="System Role">

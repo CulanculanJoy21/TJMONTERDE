@@ -11,7 +11,7 @@ class AuthController extends Controller
 {
     /**
      * Authenticate a user and return a token.
-     * Restricted to Admin and Manager only.
+     * Restricted to Admin and Manager only on web dashboards.
      */
     public function login(Request $request)
     {
@@ -20,40 +20,35 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        // 1. First, check if the email exists
         $user = User::where('email', $data['email'])->first();
 
         if (! $user) {
             return response()->json([
                 'message' => 'The email address you entered does not exist.'
-            ], 404); // Not Found
+            ], 404);
         }
 
-        // 2. Next, check if the password is correct
         if (! Hash::check($data['password'], $user->password)) {
             return response()->json([
                 'message' => 'Incorrect password. Please try again.'
-            ], 401); // Unauthorized
+            ], 401);
         }
 
-        // 3. 🛡️ ROLE GATEKEEPER
+        // 🛡️ ROLE GATEKEEPER
         $clientPlatform = $request->header('X-Client-Platform');
 
         if ($user->role === 'field_personnel') {
-            // 🚚 Drivers are strictly forbidden from logging into the Web Dashboard
             if ($clientPlatform !== 'android') {
                 return response()->json([
                     'message' => 'Unauthorized: Driver accounts can only log in via the mobile application.'
                 ], 403);
             }
         } elseif (!in_array($user->role, ['admin', 'manager'])) {
-            // Block any other roles that aren't admin or manager
             return response()->json([
                 'message' => 'Unauthorized: Access denied.'
             ], 403);
         }
 
-        // Revoke previous tokens for a clean session
         $user->tokens()->delete();
         $token = $user->createToken('scms-token')->plainTextToken;
 
@@ -65,11 +60,9 @@ class AuthController extends Controller
 
     /**
      * Admin-only Registration.
-     * Use this for adding new users/drivers from the dashboard.
      */
     public function register(Request $request)
     {
-        // 🛡️ Ensure only current admins can create new users
         if ($request->user()->role !== 'admin') {
             return response()->json(['message' => 'Unauthorized: Admin access required.'], 403);
         }
@@ -77,7 +70,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8', // Usually set by admin
+            'password' => 'required|string|min:8',
             'role'     => 'required|in:admin,manager,field_personnel,supplier',
         ]);
 
@@ -92,6 +85,42 @@ class AuthController extends Controller
             'message' => 'User created successfully',
             'user'    => $user,
         ], 201);
+    }
+
+    /**
+     * ─── NEW: ADMIN-ONLY USER DELETION ───
+     * Permanent removal of system operators, protecting Admins.
+     */
+    public function destroy(Request $request, $id)
+    {
+        // 1. Enforce admin privileges
+        if ($request->user()->role !== 'admin') {
+            return response()->json([
+                'message' => 'Unauthorized: Only system administrators can drop user accounts.'
+            ], 403);
+        }
+
+        // 2. Locate target profile
+        $userToKill = User::find($id);
+        if (! $userToKill) {
+            return response()->json([
+                'message' => 'Target user record not found.'
+            ], 404);
+        }
+
+        // 3. 🛡️ CRITICAL GATE: Block deletion of ANY Admin profile
+        if ($userToKill->role === 'admin') {
+            return response()->json([
+                'message' => 'Action Forbidden: System Administrator accounts are structurally protected and cannot be deleted.'
+            ], 403);
+        }
+
+        // 4. Execute standard database deletion
+        $userToKill->delete();
+
+        return response()->json([
+            'message' => 'User account successfully expunged from system registry.'
+        ], 200);
     }
 
     public function logout(Request $request)

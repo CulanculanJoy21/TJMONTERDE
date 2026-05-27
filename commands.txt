@@ -7,45 +7,11 @@ Steps
 cd scms-backend
 php artisan serve --host=0.0.0.0 --port=8000
 5. for your second terminal cd into your dashbord
-cd scms-dashboard (npm run dev)
+cd scms-dashboard 
+npm run dev
 
 6. Open your browser then search localhost:3000
 
-
-What to install
-Composer
-PHP 8.2 or 8.4
-Xampp
-
-1. Import and Launch the Database
-Open the XAMPP Control Panel on the new machine and hit Start next to Apache and MySQL.
-
-Open a web browser and navigate to http://localhost/phpmyadmin/.
-
-Click New on the left panel to create a brand new database container. Name it exactly what your project uses (e.g., scms_db
-2. Synchronize Environment Configurations
-Open your backend project folder on the new computer.
-
-Look for the .env file. If it didn't copy over, look for a file named .env.example, make a copy of it, and rename that copy to .env.
-
-Open the .env file in a text editor and verify that the database credentials match XAMPP defaults:
-
-Code snippet
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=your_database_name
-DB_USERNAME=root
-DB_PASSWORD=
-3. Build the Application Architecture (Command Line)
-Open the command terminal (CMD) directly inside your backend project root directory on the new machine and execute these three setup lines:
-
-Bash
-# Installs all required core Laravel framework package dependencies
-composer install
-
-# Generates a fresh application encryption security key inside your .env file
-php artisan key:generate
-
-# Automatically builds all tables, index constraints, and structure maps inside MySQL
-php artisan migrate --seed
+Admin 
+Username: admin@scmns.local
+password: password
